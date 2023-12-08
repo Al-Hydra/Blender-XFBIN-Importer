@@ -34,7 +34,7 @@ class XFBIN_UL_TexturePreviewList(bpy.types.UIList):
             row = layout.row()
             row.prop(item, 'image', text='', icon='IMAGE_DATA')
             #read only properties
-            #row.label(text = f'Size: {item.width}x{item.height}')
+            row.label(text = f'Format: {item.pixel_format}  Size: {item.width}x{item.height}.')
             #row.prop(item, 'pixel_format', text='Format', emboss=False)
         
         elif self.layout_type in {'GRID'}:
