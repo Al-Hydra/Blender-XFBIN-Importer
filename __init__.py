@@ -3,12 +3,12 @@ import importlib.util
 blender_loader = importlib.util.find_spec('bpy')
 
 bl_info = {
-    "name": "CyberConnect2 XFBIN File Import/Export",
-    "author": "SutandoTsukai181, HydraBladeZ",
-    "version": (1, 3, 3),
-    "blender": (3, 6, 0),
+    "name": "XFBIN File Importer/Exporter",
+    "author": "SutandoTsukai181, HydraBladeZ, Dei, TheLeonX",
+    "version": (1, 5, 0),
+    "blender": (4, 0, 0),
     "location": "File > Import-Export",
-    "description": "Import/Export XFBIN model files found in CyberConnect2 Naruto Storm and JoJo games.",
+    "description": "Import/Export XFBIN files found in CC2's Storm Engine games.",
     "warning": "",
     "doc_url": "https://github.com/SutandoTsukai181/cc2_xfbin_blender/wiki",
     "wiki_url": "https://github.com/SutandoTsukai181/cc2_xfbin_blender/wiki",
