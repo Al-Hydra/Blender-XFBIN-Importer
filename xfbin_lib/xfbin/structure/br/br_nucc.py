@@ -236,7 +236,7 @@ class BrNuccChunkClump(BrNuccChunk):
         super().init_data(br)
 
         # 0 or 1 (?)
-        self.field00 = br.read_uint32()
+        self.field00 = br.read_uint32() # 0 disables post processing effects
 
         self.coordCount = br.read_uint16()
         self.coordFlag0 = br.read_uint8()

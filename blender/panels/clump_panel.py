@@ -80,7 +80,7 @@ class ClumpPropertyGroup(PropertyGroup):
     )
 
     field00: IntProperty(
-        name='Clump Unk',
+        name='Post Processing',
     )
 
     coord_flag0: IntProperty(
@@ -224,6 +224,7 @@ class ClumpPropertyPanel(Panel):
         row = box.row()
         row.prop(data, 'coord_flag0')
         row.prop(data, 'coord_flag1')
+        row.prop(data, 'field00')
 
         layout.prop(data, 'path')
 

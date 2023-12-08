@@ -823,7 +823,7 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
     except Exception as e:
         print(e)
 
-
+    '''
     # Create the constraints for the armatures if they exist
     for p in anm.coord_parents:
         if anm.clumps[p.parent_clump_index] != anm.clumps[p.child_clump_index]: # The parent and child clump are different, so it's a constraint
@@ -849,7 +849,7 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
                 childof_constraint.subtarget = target_bone
                 childof_constraint.inverse_matrix = Matrix.Identity(4)
             else: # One of the armatures doesn't exist
-                print(f"Couldn't find one of the constraint armatures: {anm.clumps[p.child_clump_index].chunk.name + ' [C]'}")
+                print(f"Couldn't find one of the constraint armatures: {anm.clumps[p.child_clump_index].chunk.name + ' [C]'}")'''
                 
 
     bpy.ops.object.mode_set(mode='POSE')
