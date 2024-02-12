@@ -46,6 +46,8 @@ class AnmCurveFormat(IntEnum):
     FLOAT3ALT2 = 0x15  # scale
     FLOAT1ALT = 0x16  # lightdirc
     FLOAT1ALT2 = 0x18  # material
+    FLOAT3ALT3 = 0x1A # location no interp
+    SHORT4ALT = 0x1B # rotation quaternions no interp
 
 
 class BrAnmCurveHeader(BrStruct):
@@ -123,6 +125,14 @@ class BrAnmEntry(BrStruct):
             elif header.curve_format == AnmCurveFormat.FLOAT1ALT2:  # 0x18
                 for i in range(header.keyframe_count):
                     curve[i] = br.read_float(1)
+
+            elif header.curve_format == AnmCurveFormat.FLOAT3ALT3:  # 0x1A
+                for i in range(header.keyframe_count):
+                    curve[i] = br.read_float(3)
+
+            elif header.curve_format == AnmCurveFormat.SHORT4ALT:  # 0x1B
+                for i in range(header.keyframe_count):
+                    curve[i] = br.read_int16(4)
 
             else:
                 print(f'NuccChunkAnm: Unsupported curve format {header.curve_format}')
