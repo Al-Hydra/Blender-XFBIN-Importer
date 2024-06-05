@@ -662,6 +662,7 @@ class XfbinExporter:
                     mesh.calc_tangents()
                 except:
                     self.report({'WARNING'}, f"{mesh_obj.name} tangents can't be calculated, try triangulating the mesh")
+                mesh.calc_normals_split()
 
                 faces = [None] * len(mesh.loop_triangles)
                 face_index = 0
@@ -768,6 +769,7 @@ class XfbinExporter:
                 vertices = list(vertices_dict)
 
                 # Free the mesh data after we're done with it
+                mesh.free_normals_split()
                 mesh.free_tangents()
 
                 if len(vertices) < 3:
