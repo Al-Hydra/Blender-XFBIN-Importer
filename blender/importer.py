@@ -384,11 +384,15 @@ class XfbinImporter:
                     new_bmesh.free()
 
                     # Use the custom normals we made eariler
-                    overall_mesh.create_normals_split()
+                    if bpy.app.version < (4, 1):
+                        overall_mesh.create_normals_split()
+
                     overall_mesh.normals_split_custom_set_from_vertices(
                         custom_normals)
-                    overall_mesh.auto_smooth_angle = 0
-                    overall_mesh.use_auto_smooth = True
+
+                    if bpy.app.version < (4, 1):
+                        overall_mesh.auto_smooth_angle = 0
+                        overall_mesh.use_auto_smooth = True
 
                     #add uv and color data
                     for i in range(len(mesh.vertices[0].uv)):
