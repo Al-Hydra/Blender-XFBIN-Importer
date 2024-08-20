@@ -243,7 +243,8 @@ class BrNuccChunkClump(BrNuccChunk):
         self.coordFlag1 = br.read_uint8()
 
         if self.field00 == 2:
-            br.read_half_float(14) #it might be wise to check what these values are used for
+            self.bounding_box = br.read_float(6)
+            br.read_uint32()
 
         # Signed because root node's parent index is -1
         self.coordNodeParentsIndices = br.read_int16(self.coordCount)
@@ -273,6 +274,10 @@ class BrNuccChunkClump(BrNuccChunk):
         br.write_uint16(len(self.nuccChunk.coord_chunks))
         br.write_uint8(self.nuccChunk.coord_flag0)
         br.write_uint8(self.nuccChunk.coord_flag1)
+
+        if self.nuccChunk.field00 == 2:
+            br.write_float(self.nuccChunk.bounding_box)
+            br.write_uint32(0)
 
         # Enumerate the coord chunks because the parent indices are respective to the local coord indices list, not the page indices
         coord_chunks_dict = IterativeDict()
@@ -668,6 +673,35 @@ class BrNuccChunkAnm(BrNuccChunk):
         self.coord_parents = br.read_struct(BrAnmCoordParent, self.coord_count)
 
         self.entries = br.read_struct(BrAnmEntry, self.entry_count)
+    
+    def __br_write__(self, br: 'BinaryReader', chunkIndexDict: IterativeDict):
+        br.write_uint32(self.nuccChunk.frame_count * 100)
+        br.write_uint32(self.nuccChunk.frame_size * 100)
+
+        br.write_uint16(self.nuccChunk.entry_count)
+        br.write_uint16(self.nuccChunk.loop_flag)
+        br.write_uint16(self.nuccChunk.clump_count)
+        br.write_uint16(self.nuccChunk.other_entry_count)
+        br.write_uint16(self.nuccChunk.other_index_count)
+
+        br.write_uint16(self.nuccChunk.coord_count)
+
+        for clump in self.nuccChunk.clumps:
+            br.write_struct(BrAnmClump(), clump)
+
+        #br.write_uint32(self.nuccChunk.other_entry_indices)
+        if self.other_entry_count > 0:
+            #g = 0
+            for i in range(1,self.other_entry_count):
+                #g += 1
+                br.write_uint32(i)
+
+        for coord_parent in self.nuccChunk.coord_parents:
+            br.write_struct(BrAnmCoordParent(), coord_parent)
+
+        for entry in self.nuccChunk.entries:
+            br.write_struct(BrAnmEntry(), entry)
+
 
 class BrNuccChunkAnmStrm(BrNuccChunk):
     def init_data(self, br: BinaryReader):

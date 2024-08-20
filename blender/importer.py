@@ -5,8 +5,8 @@ import time
 import bmesh
 import bpy
 from bmesh.types import BMesh
-from bpy.props import BoolProperty, StringProperty, CollectionProperty
-from bpy.types import Action, Camera, Bone, Material, Object, Operator
+from bpy.props import BoolProperty, StringProperty, CollectionProperty, IntProperty
+from bpy.types import Action, Camera, Bone, Material, Object, Operator, UIList
 from bpy_extras.io_utils import ImportHelper
 from mathutils import Matrix, Quaternion, Vector, Euler
 
@@ -31,10 +31,75 @@ from .common.helpers import (XFBIN_DYNAMICS_OBJ, XFBIN_ANMS_OBJ, XFBIN_TEXTURES_
 from .common.shaders import (shaders_dict, collision_mat)
 import cProfile
 
+
+class XFBIN_UL_IMPORT_LIST(UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        
+        layout.prop(item, "name", text="", emboss=False)
+
+class XFBIN_OT_IMPORT_ADD_FILE(Operator):
+    bl_idname = "xfbin.import_add_file"
+    bl_label = "Add File"
+
+    def execute(self, context):
+        context.scene.xfbin_import_files_data.add()
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return self.execute(context)
+    
+
+class XFBIN_OT_IMPORT_REMOVE_FILE(Operator):
+    bl_idname = "xfbin.import_remove_file"
+    bl_label = "Remove File"
+
+    index: IntProperty(name="Index")
+
+    def execute(self, context):
+        context.scene.xfbin_import_files_data.remove(self.index)
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return self.execute(context)
+    
+
+class XFBIN_OT_IMPORT_CLEAR_FILES(Operator):
+    bl_idname = "xfbin.import_clear_files"
+    bl_label = "Clear Files"
+
+    def execute(self, context):
+        context.scene.xfbin_import_files_data.clear()
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return self.execute(context)
+
+
+class XFBIN_OT_IMPORT_MOVE_FILE(Operator):
+    bl_idname = "xfbin.import_move_file"
+    bl_label = "Move File"
+
+    index: IntProperty(name="Index")
+    direction: IntProperty(name="Direction")
+
+    def execute(self, context):
+        context.scene.xfbin_import_files_data.move(self.index, self.index + self.direction)
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return self.execute(context)
+
+
+class XFBIN_IMPORT_FILES(bpy.types.PropertyGroup):
+    name: StringProperty(name="Name", subtype='FILE_PATH')
+
+
 class ImportXFBIN(Operator, ImportHelper):
     """Loads an XFBIN file into blender"""
     bl_idname = "import_scene.xfbin"
     bl_label = "Import XFBIN"
+
+    #files_list: CollectionProperty(type=XFBIN_IMPORT_FILES)
 
     files: CollectionProperty(type=bpy.types.OperatorFileListElement, options={'HIDDEN', 'SKIP_SAVE'})
 
@@ -56,6 +121,8 @@ class ImportXFBIN(Operator, ImportHelper):
 
     import_modelhit: BoolProperty(name='Import Stage Collision', default=True)
 
+    index: IntProperty(name="Index")
+
     def draw(self, context):
         layout = self.layout
 
@@ -68,6 +135,19 @@ class ImportXFBIN(Operator, ImportHelper):
         layout.prop(self, 'use_full_material_names')
         layout.prop(self, 'import_modelhit')
 
+        #add a list of files to import
+        layout.label(text="Files:")
+        layout.template_list("XFBIN_UL_IMPORT_LIST", "", self, "files", self, "index", rows=5)
+
+        #row = layout.row(align=True)
+        #row.operator("xfbin.import_add_file", icon='ADD', text="")
+        '''row.operator("xfbin.import_remove_file", icon='REMOVE', text="").index = self.index
+        row.operator("xfbin.import_clear_files", icon='X', text="")
+        row = layout.row(align=True)
+        row.operator("xfbin.import_move_file", icon='TRIA_UP', text="").index = self.index
+        row.operator("xfbin.import_move_file", icon='TRIA_DOWN', text="").index = self.index'''
+        
+    
     def execute(self, context):
 
         start_time = time.time()
@@ -91,6 +171,67 @@ class ImportXFBIN(Operator, ImportHelper):
         #     self.report({"ERROR"}, str(error))
         # return {'CANCELLED'}
 
+class DropXFBIN(Operator):
+    """Allows XFBIN files to be dropped into the viewport to import them"""
+    bl_idname = "import_scene.drop_xfbin"
+    bl_label = "Import XFBIN"
+
+    #files_list: CollectionProperty(type=XFBIN_IMPORT_FILES)
+
+    files: CollectionProperty(type=bpy.types.OperatorFileListElement, options={'HIDDEN', 'SKIP_SAVE'})
+
+    directory: StringProperty(subtype='DIR_PATH', options={'HIDDEN', 'SKIP_SAVE'})
+
+    use_full_material_names: BoolProperty(
+        name="Full material names",
+        description="Display full name of materials in NUD meshes, instead of a shortened form")
+
+    filter_glob: StringProperty(default="*.xfbin", options={"HIDDEN"})
+
+    import_textures: BoolProperty(name='Import Textures', default=True)
+
+    clear_textures: BoolProperty(name='Clear Textures List', default=False,
+                                 description='Clear the textures list before importing\n'
+                                              "WARNING: Only enable this option if you're sure of what you're doing")
+
+    skip_lod_tex: BoolProperty(name='Skip LOD Textures', default=False)
+
+    import_modelhit: BoolProperty(name='Import Stage Collision', default=True)
+
+    index: IntProperty(name="Index")
+    
+    print("TRIGGERED")
+
+    def execute(self, context):
+
+        start_time = time.time()
+
+        print("EXECUTING")
+        for file in self.files:
+            
+            self.filepath = os.path.join(self.directory, file.name)
+
+            importer = XfbinImporter(
+                self, self.filepath, self.as_keywords(ignore=("filter_glob",)))
+
+            importer.read(context)
+
+        elapsed_s = "{:.2f}s".format(time.time() - start_time)
+        self.report({'INFO'}, "XFBIN import finished in " + elapsed_s)
+        #print("XFBIN import finished in " + elapsed_s)
+
+
+        return {'FINISHED'}
+
+class XFBIN_FH_import(bpy.types.FileHandler):
+    bl_idname = "XFBIN_FH_import"
+    bl_label = "File handler for XFBIN files"
+    bl_import_operator = "import_scene.drop_xfbin"
+    bl_file_extensions = ".xfbin"
+
+    @classmethod
+    def poll_drop(cls, context):
+        return (context.area and context.area.type == 'VIEW_3D')
 
 class XfbinImporter:
     def __init__(self, operator: Operator, filepath: str, import_settings: dict):
@@ -218,8 +359,7 @@ class XfbinImporter:
         self.collection.objects.link(dynamics_obj)
 
     def make_armature(self, clump: NuccChunkClump, context):
-        # Avoid blender renaming meshes by making the armature name unique
-        armature_name = f'{clump.name} [C]'
+        armature_name = clump.name
 
         armature = bpy.data.armatures.new(f"{armature_name}")
         armature.display_type = 'STICK'
@@ -248,7 +388,7 @@ class XfbinImporter:
 
             # Convert the node values
             pos = pos_cm_to_m(node.position)
-            rot = rot_to_blender(node.rotation)
+            rot = rot_to_blender(node.rotation).to_quaternion()
             sca = Vector(node.scale)
 
             # Set up the transformation matrix
@@ -279,6 +419,7 @@ class XfbinImporter:
             bone['unk_short'] = node.unkShort
             bone['matrix'] = node.matrix
             bone["orig_coords"] = [node.position, node.rotation, node.scale]
+            bone["rotation_quat"] = rot
 
             #relative_matrix = parent_matrix.inverted() @ this_bone_matrix
             #dloc, drot, dsca = relative_matrix.decompose()
@@ -303,11 +444,6 @@ class XfbinImporter:
             for i, name in enumerate(vertex_group_list)
         }
 
-        # Small QoL fix for JoJo "_f" models to show shortened material names
-        clump_name = clump.name
-        if clump_name.endswith('_f'):
-            clump_name = clump_name[:-2]
-
         all_model_chunks = list(dict.fromkeys(
             chain(clump.model_chunks, *map(lambda x: x.model_chunks, clump.model_groups))))
         for nucc_model in all_model_chunks:
@@ -326,140 +462,153 @@ class XfbinImporter:
             nud = nucc_model.nud
 
             # Create an empty to store the NUD's properties, and set the armature to be its parent
-            empty = bpy.data.objects.new(nucc_model.name, None)
-            empty.empty_display_size = 0
-            empty.parent = armature_obj
+            blender_mesh = bpy.data.meshes.new(nucc_model.name)
+            #blender_mesh.auto_smooth_angle = 180
+            #blender_mesh.use_auto_smooth = True
+            #blender_mesh.create_normals_split()
 
-            # Link the empty to the collection
-            self.collection.objects.link(empty)
-
-            # Set the NUD properties
-            empty.xfbin_nud_data.init_data(
-                nucc_model, nucc_model.coord_chunk.name if nucc_model.coord_chunk else None)
+            #create a bmesh to store all the meshes
+            bm = bmesh.new()
 
             # Get the bone range that this NUD uses
             bone_range = nud.get_bone_range()
 
-            # Set the mesh bone as the empty's parent bone, if it exists (it should)
+            # Set the mesh bone as the object's parent bone, if it exists (it should)
             mesh_bone = None
             if nucc_model.coord_chunk:
                 mesh_bone: Bone = armature_obj.data.bones.get(
                     nucc_model.coord_chunk.name)
-                if mesh_bone and bone_range == (0, 0):
-                    # create object constraints
-                    empty.parent = armature_obj
-                    empty.parent_type = 'BONE'
-                    empty.parent_bone = mesh_bone.name
 
-                    '''const = empty.constraints.new('CHILD_OF')
-                    const.target = armature_obj
-                    const.subtarget = mesh_bone.name
-                    const.set_inverse_pending = False'''
+            custom_normals = list()
+
+            deform = bm.verts.layers.deform.new("Vertex Weights")
+            color = bm.loops.layers.color.new("Color")
+            
+            '''
+            This is an unreliable way to get the number of UV layers, since the number of UV layers can vary between meshes
+            uv_count = len(nud.mesh_groups[0].meshes[0].vertices[0].uv)
+            uv_layers = [bm.loops.layers.uv.new(f"UV_{i}") for i in range(uv_count)]
+            '''
+
+            uv_layers = {}
 
             for group in nud.mesh_groups:
-                for i, mesh in enumerate(group.meshes):
-                    mat_chunk = nucc_model.material_chunks[i]
-                    mat_name = mat_chunk.name
-                    #blender_mat = self.make_material(mat_chunk, mesh, nud)
+                for mat_index, mesh in enumerate(group.meshes):
+                    mat_chunk = nucc_model.material_chunks[mat_index]
 
-                    # Try to shorten the material name before adding it to the mesh name
-                    if (not self.use_full_material_names) and mat_name.startswith(clump_name):
-                        mat_name = mat_name[len(clump_name):].strip(' _')
+                    #add the material to the mesh
+                    blender_mesh.materials.append(self.make_material(mat_chunk, mesh))
 
-                    # Add the material name to the group name because we don't have a way
-                    # to differentiate between meshes in the same group
-                    # The order of the mesh might matter, so the index is added here regardless
-                    mesh_name = f'{group.name} ({i+1}) [{mat_name}]' if len(
-                        mat_name) else group.name
+                    uv_count = len(mesh.vertices[0].uv)
 
-                    overall_mesh = bpy.data.meshes.new(mesh_name)
-
-                    # This list will get filled in nud_mesh_to_bmesh
-                    custom_normals = list()
-                    new_bmesh = self.nud_mesh_to_bmesh(
-                        mesh, clump, vertex_group_indices, custom_normals)
-
-                    # Convert the BMesh to a blender Mesh
-                    new_bmesh.to_mesh(overall_mesh)
-                    new_bmesh.free()
-
-                    # Use the custom normals we made eariler
-                    overall_mesh.create_normals_split()
-                    overall_mesh.normals_split_custom_set_from_vertices(
-                        custom_normals)
-                    overall_mesh.auto_smooth_angle = 0
-                    overall_mesh.use_auto_smooth = True
-
-                    #add uv and color data
-                    for i in range(len(mesh.vertices[0].uv)):
-                        overall_mesh.uv_layers.new(name=f'UV_{i}')
-                    
-                    color_layer = overall_mesh.vertex_colors.new(name='Color')
-
-                    #we're gonna assume that all meshes have a color layer
-                    for poly in overall_mesh.polygons:
-                        for loop_index in poly.loop_indices:
-                            loop = overall_mesh.loops[loop_index]
-                            vert = mesh.vertices[loop.vertex_index]
-                            for i in range(len(mesh.vertices[0].uv)):
-                                overall_mesh.uv_layers[i].data[loop_index].uv = uv_to_blender(vert.uv[i])
-                            color_layer.data[loop_index].color = [x / 255 for x in vert.color]
-                    
-                    
-                    # If we're not going to parent it, transform the mesh by the bone's matrix
-                    if mesh_bone and bone_range != (0, 0):                        
-                        #overall_mesh.transform(nucc_model.coord_chunk.node.matrix)
-                        overall_mesh.transform(mesh_bone.matrix_local)
-
-                    '''else:
-                        loc, rot, scale = nucc_model.coord_chunk.node.matrix.decompose()
-                        matrix = Matrix()
-                        matrix = matrix @ Matrix.Scale(scale.x, 4, (1, 0, 0))
-                        matrix = matrix @ Matrix.Scale(scale.y, 4, (0, 1, 0))
-                        matrix = matrix @ Matrix.Scale(scale.z, 4, (0, 0, 1))
-                        
-                        overall_mesh.transform(matrix)'''
-
-
-                    mesh_obj: bpy.types.Object = bpy.data.objects.new(
-                        mesh_name, overall_mesh)
-                    
-                    #set active color
-                    mesh_obj.data.color_attributes.render_color_index = 0
-                    mesh_obj.data.color_attributes.active_color_index = 0
-
-                    # Link the mesh object to the collection
-                    self.collection.objects.link(mesh_obj)
-
-                    # Parent the mesh to the empty
-                    mesh_obj.parent = empty
-
-                    #parent the modelhit to the empty
-                    if modelhit_obj:
-                        modelhit_obj.parent = empty
-
-                    # Set the mesh as the active object to properly initialize its PropertyGroup
-                    context.view_layer.objects.active = mesh_obj
-
-                    # Set the NUD mesh properties
-                    blender_mats = self.make_material(mat_chunk, mesh)
-                    mesh_obj.xfbin_mesh_data.init_data(mesh, mat_chunk.name)
-
-                    # Create the vertex groups for all bones (required)
-                    for name in [coord.node.name for coord in clump.coord_chunks]:
-                        mesh_obj.vertex_groups.new(name=name)
-
-                    # Apply the armature modifier
-                    modifier = mesh_obj.modifiers.new(
-                        type='ARMATURE', name="Armature")
-                    modifier.object = armature_obj
-
-                    # Add the xfbin materials to the mesh
-                    for blender_mat in blender_mats:
-                        overall_mesh.materials.append(blender_mat)
-                    
+                    #check if the uv layers already exist
+                    for uv in range(uv_count):
+                        if not uv_layers.get(uv):
+                            uv_layers[uv] = bm.loops.layers.uv.new(f"UV_{uv}")
                     
 
+                    vCount = len(bm.verts)
+
+                    # Vertices
+                    for vtx in mesh.vertices:
+                        vert = bm.verts.new(pos_scaled_to_blender(vtx.position))
+
+                        # Tangents cannot be applied
+                        normal = pos_to_blender(vtx.normal)
+                        custom_normals.append(pos_to_blender(vtx.normal))
+                        vert.normal = normal
+
+                        if vtx.bone_weights:
+                            for bone_id, bone_weight in zip(vtx.bone_ids, vtx.bone_weights):
+                                if bone_weight > 0:
+                                    vertex_group_index = vertex_group_indices[clump.coord_chunks[bone_id].name]
+                                    vert[deform][vertex_group_index] = bone_weight
+
+                    # Set up the indexing table inside the bmesh so lookups work
+                    bm.verts.ensure_lookup_table()
+                    bm.verts.index_update()
+
+                    # For each triangle, add it to the bmesh
+                    for mesh_face in mesh.faces:
+                        tri_idxs = mesh_face
+
+                        # Skip "degenerate" triangles
+                        if len(set(tri_idxs)) != 3:
+                            continue
+
+                        try:
+                            face = bm.faces.new((bm.verts[tri_idxs[0]+vCount], bm.verts[tri_idxs[1]+vCount], bm.verts[tri_idxs[2]+vCount]))
+                            face.smooth = True
+                            #set face material
+                            face.material_index = mat_index
+
+                            # Set up the UVs and colors for each vertex in the face
+                            for loop in face.loops:
+                                loop[color] = [x / 255 for x in mesh.vertices[loop.vert.index - vCount].color]
+                                for uvi in range(uv_count):
+                                    loop[uv_layers[uvi]].uv = uv_to_blender(mesh.vertices[loop.vert.index - vCount].uv[uvi])
+
+                        except Exception as e:
+                            # We might get duplicate faces for some reason
+                            # print(e)
+                            pass
+                    
+                    
+            bm.to_mesh(blender_mesh)
+            bm.free()
+            
+
+            blender_mesh.normals_split_custom_set_from_vertices(custom_normals)
+            mesh_obj: bpy.types.Object = bpy.data.objects.new(
+                nucc_model.name, blender_mesh)
+            
+            # Set the NUD properties
+            mesh_obj.xfbin_nud_data.init_data(
+                nucc_model, nucc_model.coord_chunk.name if nucc_model.coord_chunk else None)
+
+            # set the mesh's parent to the armature
+            mesh_obj.parent = armature_obj
+
+            # Set the mesh's parent bone to the mesh bone
+            if mesh_bone:
+                mesh_obj.parent_bone = mesh_bone.name
+            
+            # If we're not going to parent it, transform the mesh by the bone's matrix
+            if mesh_bone and bone_range != (0, 0):                        
+                blender_mesh.transform(nucc_model.coord_chunk.node.matrix)
+                #blender_mesh.transform(mesh_bone.matrix_local)
+            else:
+                mesh_obj.parent_type = 'BONE'
+            
+            #set active color
+            mesh_obj.data.color_attributes.render_color_index = 0
+            mesh_obj.data.color_attributes.active_color_index = 0
+
+            # Link the mesh object to the collection
+            self.collection.objects.link(mesh_obj)
+
+            #parent the modelhit to the empty
+            #if modelhit_obj:
+            #    modelhit_obj.parent = empty
+
+            # Create the vertex groups for all bones (required)
+            for name in [coord.node.name for coord in clump.coord_chunks]:
+                mesh_obj.vertex_groups.new(name=name)
+            
+            '''# Create the vertex groups for bones in the bone range
+            for name in [clump.coord_chunks[i].name for i in range(bone_range[0], bone_range[1]+1)]:
+                mesh_obj.vertex_groups.new(name=name)'''
+
+            # Apply the armature modifier
+            modifier = mesh_obj.modifiers.new(
+                type='ARMATURE', name="Armature")
+            modifier.object = armature_obj
+
+            # Add the xfbin materials to the mesh
+            #for blender_mat in blender_mats:
+            #    overall_mesh.materials.append(blender_mat)
+                    
+                    
     def make_modelhit(self, modelhit: NuccChunkModelHit, armature_obj: Object, context):
 
         if not isinstance(modelhit, NuccChunkModelHit):
@@ -627,11 +776,10 @@ class XfbinImporter:
 
     def make_material(self, xfbin_mat: NuccChunkMaterial, mesh) -> Material:
         material_name = xfbin_mat.name
-        materials = []
         if not bpy.data.materials.get(material_name):
             
             material = bpy.data.materials.new(material_name)
-            material.xfbin_material_data.init_data(xfbin_mat)
+            material.xfbin_material_data.init_data(xfbin_mat, mesh)
 
             meshmat = mesh.materials[0]
             
@@ -648,28 +796,30 @@ class XfbinImporter:
             material = shaders_dict.get("default")(
                 self, meshmat, xfbin_mat, material, material_name)
 
-            materials.append(material)
             
         else:
             material = bpy.data.materials.get(material_name)
-            materials.append(material)
+            material.xfbin_material_data.init_data(xfbin_mat, mesh)
 
-        return materials
+        return material
 
-    def nud_mesh_to_bmesh(self, mesh: NudMesh, clump: NuccChunkClump, vertex_group_indices, custom_normals) -> BMesh:
+    def nud_mesh_to_bmesh(self, mesh: NudMesh, clump: NuccChunkClump, vertex_group_indices, custom_normals, mat_index) -> BMesh:
         bm = bmesh.new()
 
         deform = bm.verts.layers.deform.new("Vertex Weights")
+        color = bm.loops.layers.color.new("Color")
+        
+        uv_layers = [bm.loops.layers.uv.new(f"UV_{i}") for i in range(len(mesh.vertices[0].uv))]
+
 
         # Vertices
         for vtx in mesh.vertices:
             vert = bm.verts.new(pos_scaled_to_blender(vtx.position))
 
             # Tangents cannot be applied
-            if vtx.normal:
-                normal = pos_to_blender(vtx.normal)
-                custom_normals.append(normal)
-                vert.normal = normal
+            #normal = pos_to_blender(vtx.normal)
+            custom_normals.append(pos_to_blender(vtx.normal))
+            #vert.normal = normal
 
             if vtx.bone_weights:
                 for bone_id, bone_weight in zip(vtx.bone_ids, vtx.bone_weights):
@@ -693,6 +843,15 @@ class XfbinImporter:
                 face = bm.faces.new(
                     (bm.verts[tri_idxs[0]], bm.verts[tri_idxs[1]], bm.verts[tri_idxs[2]]))
                 face.smooth = True
+                #set face material
+                face.material_index = mat_index
+
+                # Set up the UVs and colors for each vertex in the face
+                for loop in face.loops:
+                    loop[color] = [x / 255 for x in mesh.vertices[loop.vert.index].color]
+                    for i in range(len(mesh.vertices[0].uv)):
+                        loop[uv_layers[i]].uv = uv_to_blender(mesh.vertices[loop.vert.index].uv[i])
+
             except Exception as e:
                 # We might get duplicate faces for some reason
                 # print(e)
@@ -701,127 +860,124 @@ class XfbinImporter:
         return bm
 
 def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
+    #print(f"-------------------{anm.name}-------------------")
+    start_time = time.time()
+
     actions = list()
+    
+   # try:
+    for entry in anm.other_entries:
+        entry: AnmEntry
 
-    try:
-        for entry in anm.other_entries:
-            entry: AnmEntry
+        action = bpy.data.actions.new(
+            f'{anm.name} ({AnmEntryFormat(entry.entry_format).name.lower()})')
+        
+        group_name = action.groups.new(anm.name).name
 
-            action = bpy.data.actions.new(
-                f'{anm.name} ({AnmEntryFormat(entry.entry_format).name.lower()})')
+        for curve in entry.curves:
+            if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
+                continue
+
+            #frames = list(map(lambda x: frame_to_blender(x.frame), curve.keyframes))
+            frames = [frame_to_blender(x.frame) for x in curve.keyframes]
             
-            group_name = action.groups.new(anm.name).name
+            #values = convert_anm_values(curve.data_path, list(map(lambda x: x.value, curve.keyframes)))
+            values = convert_anm_values(curve.data_path, [x.value for x in curve.keyframes])
 
-            for curve in entry.curves:
+            if curve.data_path == AnmDataPath.CAMERA:
+                # TODO: change camera rotation mode to quaternion, and lens unit to FOV
+                # This should be done on playing the animation chunk
+                data_path = 'data.lens'
+            else:
+                data_path = f'{AnmDataPath(curve.data_path).name.lower()}'
+
+
+            for i in range(len(values[0])):
+                fc = action.fcurves.new(
+                    data_path=data_path, index=i, action_group=group_name)
+                fc.keyframe_points.add(len(frames))
+                fc.keyframe_points.foreach_set('co', [x for co in list(map(lambda f, v: (f, v[i]), frames, values)) for x in co])
+
+                fc.update()
+    
+    for clump in anm.clumps:
+        action = bpy.data.actions.new(f'{anm.name} ({clump.name})')
+
+        arm_obj = bpy.data.objects.get(clump.chunk.name)
+        if arm_obj is None:
+            arm_obj = bpy.data.objects.get(clump.chunk.name)
+
+        arm_sca = dict()
+        arm_mat = dict()
+
+        if arm_obj is not None:
+            context.view_layer.objects.active = arm_obj
+
+            for arm_bone in arm_obj.data.bones:
+                arm_sca[arm_bone.name] = arm_bone.get('scale_signs')
+                arm_mat[arm_bone.name] = Matrix(arm_bone.get('matrix', Matrix.Identity(4)))
+            
+            for arm_bone in arm_obj.pose.bones:
+                arm_bone.rotation_mode = "QUATERNION"
+                
+
+        for bone in clump.bones:
+            group_name = action.groups.new(bone.name).name
+
+            if bone.anm_entry is None:
+                continue
+
+
+            mat_parent = arm_mat.get(bone.parent.name, Matrix.Identity(
+                4)) if bone.parent else Matrix.Identity(4)
+            mat = arm_mat.get(bone.name, Matrix.Identity(4))
+
+            mat = (mat_parent.inverted() @ mat)
+            loc, rot, sca = mat.decompose()
+            rot.invert()
+            sca = Vector(map(lambda a: 1/a, sca))
+
+            bone_path = f'pose.bones["{group_name}"]'
+
+            bone_parent = False
+            if bone.parent:
+                bone_parent = True
+
+
+            for curve in bone.anm_entry.curves:
                 if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
                     continue
 
-                frames = list(
-                    map(lambda x: frame_to_blender(x.frame), curve.keyframes))
-                
-                values = convert_anm_values(curve.data_path, list(
-                    map(lambda x: x.value, curve.keyframes)))
+                frames = list(map(lambda x: frame_to_blender(x.frame), curve.keyframes))
 
-                if curve.data_path == AnmDataPath.CAMERA:
-                    # TODO: change camera rotation mode to quaternion, and lens unit to FOV
-                    # This should be done on playing the animation chunk
-                    data_path = 'data.lens'
+                if (bone.parent != None):
+                    #values = convert_anm_values_tranformed(curve.data_path, list(map(lambda x: x.value, curve.keyframes)), loc, rot, sca, rotate_vector, bone_parent)
+                    values = convert_anm_values_tranformed(curve.data_path, [x.value for x in curve.keyframes], loc, rot, sca, bone_parent)
                 else:
-                    data_path = f'{AnmDataPath(curve.data_path).name.lower()}'
+                    #values = convert_anm_values_tranformed_root(curve.data_path, list(map(lambda x: x.value, curve.keyframes)), loc, rot, sca)
+                    values = convert_anm_values_tranformed_root(curve.data_path, [x.value for x in curve.keyframes], loc, rot, sca)
 
+                if (curve.data_path == AnmDataPath.ROTATION_EULER):
+                    curve.data_path = AnmDataPath.ROTATION_QUATERNION
+
+                data_path = f'{bone_path}.{AnmDataPath(curve.data_path).name.lower()}'
 
                 for i in range(len(values[0])):
                     fc = action.fcurves.new(
                         data_path=data_path, index=i, action_group=group_name)
                     fc.keyframe_points.add(len(frames))
-                    fc.keyframe_points.foreach_set('co', [x for co in list(
-                        map(lambda f, v: (f, v[i]), frames, values)) for x in co])
+                    fc.keyframe_points.foreach_set('co', [x for co in list(map(lambda f, v: (f, v[i]), frames, values)) for x in co])
 
                     fc.update()
-        
-        for clump in anm.clumps:
-            action = bpy.data.actions.new(f'{anm.name} ({clump.name})')
 
-            arm_obj = bpy.data.objects.get(clump.chunk.name)
-            if arm_obj is None:
-                arm_obj = bpy.data.objects.get(clump.chunk.name + ' [C]')
-
-            arm_sca = dict()
-            arm_mat = dict()
-            arm_rot = dict()
-
-            if arm_obj is not None:
-                context.view_layer.objects.active = arm_obj
-                bpy.ops.object.mode_set(mode='EDIT')
-
-                for arm_bone in arm_obj.data.edit_bones:
-                    arm_sca[arm_bone.name] = arm_bone.get('scale_signs')
-                    arm_mat[arm_bone.name] = Matrix(arm_bone.get('matrix'))
-                    arm_rot[arm_bone.name] = Euler(arm_bone['orig_coords'][1])
-                
-                bpy.ops.object.mode_set(mode='POSE')
-                for arm_bone in arm_obj.pose.bones:
-                    arm_bone.rotation_mode = "QUATERNION"
-                    
-                bpy.ops.object.mode_set(mode='EDIT')
-
-            for bone in clump.bones:
-                group_name = action.groups.new(bone.name).name
-
-                if bone.anm_entry is None:
-                    continue
+        actions.append(action)
+    '''except Exception as e:
+        print(e)'''
 
 
+    #calculate the time it took to make the actions
+    print(f"Time: {time.time() - start_time}")
 
-                mat_parent = arm_mat.get(bone.parent.name, Matrix.Identity(
-                    4)) if bone.parent else Matrix.Identity(4)
-                mat = arm_mat.get(bone.name, Matrix.Identity(4))
-
-                mat = (mat_parent.inverted() @ mat)
-                loc, rot, sca = mat.decompose()
-                rot.invert()
-                sca = Vector(map(lambda a: 1/a, sca))
-
-                rotate_vector = arm_rot.get(bone.name,Euler([0,0,0]))
-
-                bone_path = f'pose.bones["{group_name}"]'
-
-                bone_parent = False
-                if bone.parent:
-                    bone_parent = True
-
-
-                for curve in bone.anm_entry.curves:
-                    if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
-                        continue
-
-                    frames = list(
-                        map(lambda x: frame_to_blender(x.frame), curve.keyframes))
-
-                    if (bone.parent != None):
-                        values = convert_anm_values_tranformed(curve.data_path, list(
-                            map(lambda x: x.value, curve.keyframes)), loc, rot, sca, rotate_vector, bone_parent)
-                    else:
-                        values = convert_anm_values_tranformed_root(curve.data_path, list(
-                            map(lambda x: x.value, curve.keyframes)), loc, rot, sca)
-
-                    if (curve.data_path == AnmDataPath.ROTATION_EULER):
-                        curve.data_path = AnmDataPath.ROTATION_QUATERNION
-
-                    data_path = f'{bone_path}.{AnmDataPath(curve.data_path).name.lower()}'
-
-                    for i in range(len(values[0])):
-                        fc = action.fcurves.new(
-                            data_path=data_path, index=i, action_group=group_name)
-                        fc.keyframe_points.add(len(frames))
-                        fc.keyframe_points.foreach_set('co', [x for co in list(
-                            map(lambda f, v: (f, v[i]), frames, values)) for x in co])
-
-                        fc.update()
-
-            actions.append(action)
-    except Exception as e:
-        print(e)
 
     '''
     # Create the constraints for the armatures if they exist
@@ -852,7 +1008,6 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
                 print(f"Couldn't find one of the constraint armatures: {anm.clumps[p.child_clump_index].chunk.name + ' [C]'}")'''
                 
 
-    bpy.ops.object.mode_set(mode='POSE')
     context.scene.render.fps = 30
 
     return actions
@@ -861,7 +1016,7 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
 
 
 
-def convert_anm_values_tranformed(data_path: AnmDataPath, values, loc: Vector, rot: Quaternion, sca: Vector, rotate_vector: Euler, parent: bool):
+def convert_anm_values_tranformed(data_path: AnmDataPath, values, loc: Vector, rot: Quaternion, sca: Vector, parent: bool):
     if data_path == AnmDataPath.LOCATION:
         updated_values = list()
         for value_loc in values:
@@ -871,33 +1026,38 @@ def convert_anm_values_tranformed(data_path: AnmDataPath, values, loc: Vector, r
         updated_loc = loc
         updated_loc.rotate(rot)
 
-        return list(map(lambda x: ((x*0.01) - updated_loc)[:], updated_values))
+        #return list(map(lambda x: ((x*0.01) - updated_loc)[:], updated_values))
+        return [((x*0.01) - updated_loc)[:] for x in updated_values]
 
     if data_path == AnmDataPath.ROTATION_EULER:
-        return list(map(lambda x: (rot @ ((rot_to_blender(x).to_quaternion()).to_euler()).to_quaternion())[:], values))
+        rotations = []
+        startQuat = rot
+        for frot in values:
+            endQuat = rot @ rot_to_blender(frot).to_quaternion()
+            if startQuat.dot(endQuat) < 0:
+                endQuat.negate()
+            
+            rotations.append(endQuat)
+        
+        return rotations
 
     if data_path == AnmDataPath.ROTATION_QUATERNION:
         quat_list = list()
-        updated_rot2 = Euler([math.radians(rotate_vector[0]),math.radians(rotate_vector[1]),math.radians(rotate_vector[2])]).to_quaternion()
 
         for rotation in values:
-            q = rot.conjugated().copy()
-            q.rotate(rot)
-            quat = q
-            q = rot.conjugated().copy()
-
-            if not parent:
-                q.rotate(Quaternion((rotation[3], *rotation[:3])).conjugated())
-            else:
-                q.rotate(Quaternion((rotation[3], *rotation[:3])))
-            quat.rotate(q.conjugated())
-
-            quat_list.append(quat)
+            
+            bind_rotaion = rot.conjugated()
+            rotation = Quaternion((rotation[3], *rotation[:3]))
+            #rotate it with the new rotation
+            bind_rotaion.rotate(rotation)
+            #invert the result
+            quat_list.append(Quaternion(bind_rotaion).conjugated())
 
         return quat_list
 
     if data_path == AnmDataPath.SCALE:
-        return list(map(lambda x: (Vector(([abs(y) for y in x])))[:], values))
+        #return list(map(lambda x: (Vector(([abs(y) for y in x])))[:], values))
+        return [Vector(([abs(y) for y in x]))[:] for x in values]
     return values
 
 
@@ -905,27 +1065,36 @@ def convert_anm_values_tranformed(data_path: AnmDataPath, values, loc: Vector, r
 
 def convert_anm_values_tranformed_root(data_path: AnmDataPath, values, loc: Vector, rot: Quaternion, sca: Vector):
     if data_path == AnmDataPath.LOCATION:
-        return list(map(lambda x: (loc + pos_cm_to_m(x))[:], values))
+        #return list(map(lambda x: (loc + pos_cm_to_m(x))[:], values))
+        return [loc + pos_cm_to_m(x) for x in values]
     if data_path == AnmDataPath.ROTATION_EULER:
-        return list(map(lambda x: (((rot_to_blender(x).to_quaternion()).to_euler()).to_quaternion())[:], values))
+        #return list(map(lambda x: (((rot_to_blender(x).to_quaternion()).to_euler()).to_quaternion())[:], values))
+        return [rot_to_blender(x).to_quaternion() for x in values]
     if data_path == AnmDataPath.ROTATION_QUATERNION:
-        return list(map(lambda x: (Quaternion((x[3], *x[:3])).inverted())[:], values))
+        #return list(map(lambda x: (Quaternion((x[3], *x[:3])).inverted())[:], values))
+        return [Quaternion((x[3], *x[:3])).inverted() for x in values]
     if data_path == AnmDataPath.SCALE:
-        return list(map(lambda x: (Vector(([abs(y) for y in x])))[:], values))
+        #return list(map(lambda x: (Vector(([abs(y) for y in x])))[:], values))
+        return [Vector(([abs(y) for y in x])) for x in values]
     return values
 
 
 def convert_anm_values(data_path: AnmDataPath, values):
     if data_path == AnmDataPath.LOCATION:
-        return list(map(lambda x: pos_cm_to_m_tuple(x), values))
+        #return list(map(lambda x: pos_cm_to_m_tuple(x), values))
+        return [pos_cm_to_m_tuple(x) for x in values]
     if data_path == AnmDataPath.ROTATION_EULER:
-        return list(map(lambda x: rot_to_blender(x)[:], values))
+        #return list(map(lambda x: rot_to_blender(x)[:], values))
+        return [rot_to_blender(x)[:] for x in values]
     if data_path == AnmDataPath.ROTATION_QUATERNION:
-        return list(map(lambda x: Quaternion((x[3], *x[:3])).inverted()[:], values))
+        #return list(map(lambda x: Quaternion((x[3], *x[:3])).inverted()[:], values))
+        return [Quaternion((x[3], *x[:3])).inverted()[:] for x in values]
     if data_path == AnmDataPath.SCALE:
-        return list(map(lambda x: Vector(([abs(y) for y in x]))[:], values))
+        #return list(map(lambda x: Vector(([abs(y) for y in x]))[:], values))
+        return [Vector(([abs(y) for y in x]))[:] for x in values]
     if data_path == AnmDataPath.CAMERA:
-        return list(map(lambda x: (focal_to_blender(x[0], 36.0),), values))
+        #return list(map(lambda x: (focal_to_blender(x[0], 36.0),), values))
+        return [(focal_to_blender(x[0], 36.0),) for x in values]
 
     return values
 

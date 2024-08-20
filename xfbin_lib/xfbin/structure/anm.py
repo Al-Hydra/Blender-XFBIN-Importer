@@ -152,7 +152,7 @@ def create_anm_curve(data_path: AnmDataPath, curve_format: AnmCurveFormat, curve
             curve.data_path = AnmDataPath.ROTATION_QUATERNION
             curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
 
-        if AnmCurveFormat(curve_format).name.startswith('SHORT4'):
+        elif curve_format == AnmCurveFormat.SHORT4:
             curve.data_path = AnmDataPath.ROTATION_QUATERNION
             curve.keyframes = list(map(lambda i, v: AnmKeyframe(
                 frame_size * i, tuple(map(lambda x: x / 0x8000, v))), range(len(curve_values)), curve_values))

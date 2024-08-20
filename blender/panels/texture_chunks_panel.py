@@ -229,21 +229,27 @@ class NutTexturePropertyGroup(PropertyGroup):
 
         if bpy.data.images.get(self.name):
             #update existing image
-            self.image = bpy.data.images[self.name]
-            self.image.pack(data=self.texture_data, data_len=len(self.texture_data))
-            self.image.source = 'FILE'
-            self.image.use_fake_user = True
-            self.image['nut_pixel_format'] = self.pixel_format        
+            image = bpy.data.images[self.name]
+            image.pack(data=self.texture_data, data_len=len(self.texture_data))
+            image.source = 'FILE'
+            image.use_fake_user = True
+            image['nut_pixel_format'] = self.pixel_format
+            image['nut_mipmaps_count'] = self.mipmap_count
+
+            #assign the image in the end to avoid the update_texture function being called
+            self.image = image
 
         else:
             #create new image
-            self.image = bpy.data.images.new(tex_name, width=int(self.width), height=int(self.height))
-            self.image.pack(data=self.texture_data, data_len=len(self.texture_data))
-            self.image.source = 'FILE'
-            self.image.use_fake_user = True
-            #add custom properties to the image
-            self.image['nut_pixel_format'] = self.pixel_format  
-            self.image['nut_mipmaps_count'] = self.mipmap_count      
+            image = bpy.data.images.new(self.name, width=int(self.width), height=int(self.height))
+            image.pack(data=self.texture_data, data_len=len(self.texture_data))
+            image.source = 'FILE'
+            image.use_fake_user = True
+            image['nut_pixel_format'] = self.pixel_format
+            image['nut_mipmaps_count'] = self.mipmap_count
+
+            #assign the image in the end to avoid the update_texture function being called
+            self.image = image
 
 
 class XfbinTextureChunkPropertyGroup(PropertyGroup):

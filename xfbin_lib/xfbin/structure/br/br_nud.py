@@ -1,5 +1,6 @@
 from enum import IntFlag
 from typing import List, Tuple
+import time
 
 from ...util import *
 
@@ -186,6 +187,7 @@ class BrNudMesh(BrStruct):
         # UV + Vertices
         with br.seek_to(self.vertClumpStart):
             boneType = self.vertexSize & 0xF0
+
             vertexType = self.vertexSize & 0x0F
 
             colors = list()
@@ -202,6 +204,7 @@ class BrNudMesh(BrStruct):
                     elif uvType == NudUvType.HalfFloat:
                         colors.append(
                             list(map(lambda x: int(x * 255), br.read_half_float(4))))
+                        
 
                     uvs.append(list())
                     for _ in range(uvCount):
@@ -287,6 +290,8 @@ class BrNudMesh(BrStruct):
 
                 for uv in vertex.uv:
                     buffers.vertClump.write_half_float(uv)
+
+
 
         for vertex in mesh.vertices:
             vertex_br.write_struct(BrNudVertex(), vertex,
@@ -376,6 +381,7 @@ class BrNudVertex(BrStruct):
             self.boneIds = br.read_uint8(4)
             self.boneWeights = list(
                 map(lambda x: float(x) / 255, br.read_uint8(4)))
+            
         else:
             raise Exception(f'Unsupported bone type: {boneType}')
 

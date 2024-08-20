@@ -8,6 +8,7 @@ from bpy.types import Operator, PropertyGroup, UILayout, UIList
 
 # Globals
 XFBIN_LISTS = list()
+XFBIN_SEARCH_LISTS = list()
 XFBIN_CLIPBOARD: Dict[Type, PropertyGroup] = dict()
 XFBIN_POINTERS: PropertyGroup = None
 XFBIN_OPERATORS = (('new_item', 'New', 'ADD'), ('delete_item', 'Remove', 'REMOVE'),
@@ -92,6 +93,32 @@ class EmptyPropertyGroup(PropertyGroup):
         name='Empty Object',
         update=update_empty,
         poll=poll_empty,
+    )
+
+    value: StringProperty(
+        update=update_value,
+    )
+
+    def update_name(self):
+        self.name = self.value
+
+
+class ObjectPropertyGroup(PropertyGroup):
+    def update_object(self, context):
+        if self.object:
+            self.value = self.object.name
+
+    def update_value(self, context):
+        self.update_name()
+
+    def poll_object(self, object):
+        return object.parent and object.parent.type == 'ARMATURE'
+
+    object: PointerProperty(
+        type=bpy.types.Object,
+        name='Object',
+        update=update_object,
+        poll=poll_object,
     )
 
     value: StringProperty(
@@ -189,6 +216,22 @@ class XFBIN_LIST_UL_List(UIList):
             layout.alignment = 'CENTER'
             layout.label(text='')
 
+class XFBIN_LIST_UL_SearchList(UIList):
+    """UIList."""
+
+    search_property = bpy.data
+    search_data = "objects"
+    
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            row.label(text=item.name)
+            layout.prop_search(item, 'name', bpy.data, self.search_data, text='')
+
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text='')
+
 
 # TODO: Change this to be more dynamic, instead of relying on a fixed value
 # Create a separate list for each unique list to be shown in a single object
@@ -199,8 +242,17 @@ for i in range(7):
                  (XFBIN_LIST_UL_List,),
                  {'bl_idname': panel_idname, },
                  )
-
+    
     XFBIN_LISTS.append(panel)
+
+for i in range(7):
+    panel_idname = f'XFBIN_LIST_UL_SearchList_{i}'
+    panel = type(panel_idname,
+                 (XFBIN_LIST_UL_SearchList,),
+                 {'bl_idname': panel_idname, },
+                 )
+    
+    XFBIN_SEARCH_LISTS.append(panel)
 
 
 class XFBIN_LIST_OT_NewItem(Operator):
@@ -355,7 +407,7 @@ class XFBIN_LIST_OT_PasteItem(Operator):
         return{'FINISHED'}
 
 
-def draw_xfbin_list(layout: UILayout, list_index: int, data, path: str, collection_name: str, index_name: str):
+def draw_xfbin_list(layout: UILayout, list_index: int, data, path: str, collection_name: str, index_name: str, enable_text: bool = True):
     """Draws a list using the layout and populates it with the given collection and index."""
 
     row = layout.split(factor=0.80)
@@ -363,7 +415,10 @@ def draw_xfbin_list(layout: UILayout, list_index: int, data, path: str, collecti
 
     col = row.column()
     for op, txt, icn in XFBIN_OPERATORS:
-        opr = col.operator(f'xfbin_list.{op}', text=txt, icon=icn)
+        if enable_text:
+            opr = col.operator(f'xfbin_list.{op}', text=txt, icon=icn)
+        else:
+            opr = col.operator(f'xfbin_list.{op}',text="", icon=icn)
         opr.prop_path = path
         opr.collection = collection_name
         opr.index = index_name
@@ -371,14 +426,14 @@ def draw_xfbin_list(layout: UILayout, list_index: int, data, path: str, collecti
         if op == 'move_item':
             opr.direction = txt.upper()
 
-    layout.label(text='Selected Item:')
+    #layout.label(text='Selected Item:')
 
 
-def draw_xfbin_list_mat(layout: UILayout, list_index: int, data, path: str, collection_name: str, index_name: str):
+def draw_xfbin_list_search(layout: UILayout, list_index: int, data, path: str, collection_name: str, index_name: str):
     """Draws a list using the layout and populates it with the given collection and index."""
 
     row = layout.split(factor=0.80)
-    row.template_list(f'XFBIN_LIST_UL_List_{list_index}', 'xfbin_list', data, collection_name, data, index_name)
+    row.template_list(f'XFBIN_LIST_UL_SearchList_{list_index}', 'xfbin_list', data, collection_name, data, index_name)
 
     col = row.column()
     for op, txt, icn in XFBIN_OPERATORS:
@@ -399,9 +454,11 @@ common_classes = (
     FloatPropertyGroup,
     BoolPropertyGroup,
     EmptyPropertyGroup,
+    ObjectPropertyGroup,
     XFBIN_PANEL_OT_CopyPropertyGroup,
     XFBIN_PANEL_OT_PastePropertyGroup,
     *XFBIN_LISTS,
+    *XFBIN_SEARCH_LISTS,
     XFBIN_LIST_OT_NewItem,
     XFBIN_LIST_OT_DeleteItem,
     XFBIN_LIST_OT_MoveItem,

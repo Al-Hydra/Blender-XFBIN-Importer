@@ -155,7 +155,7 @@ class NudPropertyPanel(Panel):
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return obj and obj.type == 'EMPTY' and obj.parent and obj.parent.type == 'ARMATURE'
+        return obj and obj.parent and obj.parent.type == 'ARMATURE'
 
     def draw(self, context):
         layout = self.layout
@@ -200,7 +200,7 @@ class create_bounding_sphere(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return obj and obj.type == 'EMPTY' and obj.parent is not None
+        return obj and obj.parent is not None
     def execute(self, context):
         obj = context.object
         data: NudPropertyGroup = obj.xfbin_nud_data
@@ -236,7 +236,7 @@ class update_bounding_sphere(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return obj and obj.type == 'EMPTY' and obj.parent is not None
+        return obj and obj.parent is not None
     def execute(self, context):
         obj = context.object
         data: NudPropertyGroup = obj.xfbin_nud_data

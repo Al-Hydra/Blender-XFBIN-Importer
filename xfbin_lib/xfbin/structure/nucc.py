@@ -223,6 +223,8 @@ class NuccChunkClump(NuccChunk):
         self.coord_flag0 = br_chunk.coordFlag0
         self.coord_flag1 = br_chunk.coordFlag1
 
+        self.bounding_box = br_chunk.bounding_box if self.field00 == 2 else [0, 0, 0, 0, 0, 0]
+
         self.model_flag0 = br_chunk.modelFlag0
         self.model_flag1 = br_chunk.modelFlag1
 

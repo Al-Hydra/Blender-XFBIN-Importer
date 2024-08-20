@@ -55,7 +55,7 @@ from .panels.nud_panel import NudPropertyGroup
 from .panels.texture_chunks_panel import (NutTexturePropertyGroup,
                                           TextureChunksListPropertyGroup,
                                           XfbinTextureChunkPropertyGroup)
-from .panels.materials_panel import (GlobalNutPropertyGroup)
+from .panels.materials_panel import (NUD_ShaderPropertyGroup, NUD_ShaderParamPropertyGroup, NUD_ShaderTexPropertyGroup)
 
 
 
@@ -98,7 +98,7 @@ class ExportXfbin(Operator, ExportHelper):
         description='If True, will add (or overwrite) the exportable models as pages in the selected XFBIN.\n'
         'If False, will create a new XFBIN and overwrite the old file if it exists.\n\n'
         'NOTE: If True, the selected path has to be an XFBIN file that already exists, and that file will be overwritten',
-        default=True,
+        default=False,
     )
 
     export_clumps: BoolProperty(
@@ -313,7 +313,7 @@ class XfbinExporter:
                 clump = self.make_clump(armature_obj, context)
 
                 #get the dynamics object
-                dynamics_obj = self.collection.objects.get(f'{XFBIN_DYNAMICS_OBJ} [{armature_obj.name[:-4]}]')
+                dynamics_obj = self.collection.objects.get(f'{XFBIN_DYNAMICS_OBJ} [{armature_obj.name}]')
                 if dynamics_obj:
                     dynamics = self.make_dynamics(dynamics_obj, context, clump)
                     self.xfbin.add_chunk_page(dynamics)
@@ -375,7 +375,7 @@ class XfbinExporter:
         context.view_layer.objects.active = armature_obj
 
         armature: Armature = armature_obj.data
-        empties: List[Mesh] = [obj for obj in armature_obj.children if obj.type == 'EMPTY']
+        meshes: List[Mesh] = [obj for obj in armature_obj.children if obj.type == 'MESH' and obj.name in context.view_layer.objects]
 
         clump_data: ClumpPropertyGroup = armature_obj.xfbin_clump_data
 
@@ -414,13 +414,8 @@ class XfbinExporter:
 
         # Export meshes
         if self.export_meshes:
-            # Create the material chunks
-            xfbin_mats = dict()
-            '''for mat in clump_data.materials:
-                xfbin_mats[mat.material_name] = self.make_xfbin_material(mat, clump, context)'''
-
             # Create the model chunks as a dict to make it easier to preserve order
-            model_chunks = {m.name: m for m in self.make_models(empties, clump, old_clump, context)}
+            model_chunks = {m.name: m for m in self.make_models(meshes, clump, old_clump, context)}
 
             # Set the model chunks and model groups based on the clump data
             clump.model_chunks = [model_chunks[c.value] for c in clump_data.models if c.value in model_chunks]
@@ -554,7 +549,7 @@ class XfbinExporter:
         return coords
     
 
-    def make_models(self, empties: List[Object], clump: NuccChunkClump, old_clump: NuccChunkClump, context) -> List[NuccChunkModel]:
+    def make_models(self, objects: List[Object], clump: NuccChunkClump, old_clump: NuccChunkClump, context) -> List[NuccChunkModel]:
         bpy.ops.object.mode_set(mode='OBJECT')
 
         model_chunks = list()
@@ -568,29 +563,29 @@ class XfbinExporter:
         old_clump_all_models = list(dict.fromkeys(
             chain(old_clump.model_chunks, *old_clump.model_groups))) if old_clump else None
 
-        for empty in empties:
+        for obj in objects:
             if self.export_specific_meshes:
                 # Use existing models from the old clump if the current model is not supposed to be exported
-                mesh_index = self.meshes_to_export.find(empty.name)
+                mesh_index = self.meshes_to_export.find(obj.name)
                 if mesh_index == -1:
                     continue
 
                 if self.meshes_to_export[mesh_index].value is False:
                     if old_clump:
-                        old_model = [c for c in old_clump_all_models if c and c.name == empty.name]
+                        old_model = [c for c in old_clump_all_models if c and c.name == obj.name]
                         if old_model:
                             model_chunks.append(old_model[0])
                     continue
 
-            nud_data: NudPropertyGroup = empty.xfbin_nud_data
+            nud_data: NudPropertyGroup = obj.xfbin_nud_data
             # Create the chunk and set its properties
-            chunk = NuccChunkModel(clump.filePath, empty.name)
+            chunk = NuccChunkModel(clump.filePath, obj.name)
             chunk.clump_chunk = clump
             chunk.has_data = True
             chunk.has_props = True
 
             #Check for modelhit objects and skip them
-            if empty.name.endswith('[HIT]'):
+            if obj.name.endswith('[HIT]'):
                 continue
             
             #correct modelhit name
@@ -638,13 +633,14 @@ class XfbinExporter:
             mesh_group.meshes = list()
 
             # Get the armature's data
-            armature: Armature = empty.parent.data
+            armature: Armature = obj.parent.data
             mesh_bone = armature.bones.get(nud_data.mesh_bone)
-            empty_parent_type = empty.parent_type
+            obj_parent_type = obj.parent_type
 
             # Sort the meshes alphabetically (because we made sure they imported in that order)
-            for mesh_obj in sorted([c for c in empty.children if c.type == 'MESH'], key=lambda x: x.name):
+            '''for mesh_obj in sorted([c for c in empty.children if c.type == 'MESH'], key=lambda x: x.name):
                 mesh_obj: Object
+                test_meshes = [list() for _ in mesh_obj.material_slots]
 
                 context.view_layer.objects.active = mesh_obj
                 bpy.ops.object.mode_set(mode='OBJECT')
@@ -709,6 +705,7 @@ class XfbinExporter:
                         # Create and add the vertex
                         vert = NudVertex()
                         verts.append(vert)
+                        test_meshes[tri_loops.material_index].append(vert)
 
                         # Position and normal, tangent, bitangent
                         vert.position = pos_scaled_from_blender(v.co)
@@ -829,7 +826,189 @@ class XfbinExporter:
                 continue
 
             # Only add the model chunk if its NUD contains at least one mesh
+            if len(test_meshes) > 1:
+                print(f'[NUD] {empty.name} has {len(test_meshes)} materials')
+            model_chunks.append(chunk)'''
+
+            #set the current object as the active object
+            context.view_layer.objects.active = obj
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+            # Generate a mesh with modifiers applied, and put it into a bmesh
+            mesh: Mesh = obj.evaluated_get(context.evaluated_depsgraph_get()).data
+
+            # Transform the mesh by the inverse of its bone's matrix, if it was not parented to it
+            if mesh_bone and obj_parent_type != 'BONE':
+                #print(f"Transforming {mesh_obj.name} by the inverse of {mesh_bone.name}'s matrix")
+                mesh.transform(mesh_bone.matrix_local.to_4x4().inverted())
+
+            #triangulate the mesh
+            mesh.calc_loop_triangles()
+
+            #calculate tangents
+            mesh.calc_tangents()
+            #mesh.calc_normals_split()
+
+            mesh_vertices = mesh.vertices
+            mesh_loops = mesh.loops
+
+            # Get the vertex groups
+            v_groups = obj.vertex_groups
+
+            #get the first color layer and if it doesn't exist make one
+            if len(mesh.color_attributes) > 0:
+                color_layer = mesh.color_attributes[0].data
+            else:
+                color_layer = mesh.vertex_colors.new(name='Color', type = "BYTE_COLOR", domain = "CORNER")
+                color_layer = mesh.color_attributes[0].data
+
+            #try to get the first 4 color layers
+            uv_layers = list()
+
+            for i, uv_layer in enumerate(mesh.uv_layers):
+                uv_layers.append(uv_layer.data)
+                if i == 3:
+                    break
+
+           # create a list for each material
+            mat_meshes = [list() for mat in mesh.materials]
+
+            for tri_loops in mesh.loop_triangles:
+                tri_loops: MeshLoopTriangle
+                 
+                #get the material index
+                mat_index = tri_loops.material_index
+
+                mat_meshes[mat_index].append(tri_loops)
+            
+            for i, mesh in enumerate(mat_meshes):
+
+                faces = [None] * len(mesh)
+                face_index = 0
+                vertices = [None] * len(mesh)
+                vertex_index = 0
+
+                for tri_loops in mesh:
+                    tri_loops: MeshLoopTriangle
+
+                    verts = vertices[vertex_index] = list()
+                    vertex_index += 1
+
+                    for l_index in tri_loops.loops:
+                        l: MeshLoop = mesh_loops[l_index]
+                        v_index = l.vertex_index
+                        v: MeshVertex = mesh_vertices[v_index]
+
+                        # Create and add the vertex
+                        vert = NudVertex()
+                        verts.append(vert)
+
+                        # Position and normal, tangent, bitangent
+                        vert.position = pos_scaled_from_blender(v.co)
+                        vert.normal = pos_from_blender(l.normal)
+                        vert.tangent = pos_from_blender(l.tangent)
+                        vert.bitangent = l.bitangent_sign * Vector(vert.normal).cross(Vector(vert.tangent))
+
+                        # Color
+                        if color_layer:
+                            vert.color = [int(c*255) for c in color_layer[l_index].color_srgb]
+
+                        # UV
+                        vert.uv = list()
+                        for uv_layer in uv_layers:
+                            vert.uv.append(uv_from_blender(uv_layer[l_index].uv))
+                        
+                        vert.bone_ids = tuple()
+                        vert.bone_weights = tuple()
+
+                        # Bone indices and weights
+                        # Direct copy of TheTurboTurnip's weight sorting method
+                        # https://github.com/theturboturnip/yk_gmd_io/blob/master/yk_gmd_blender/blender/export/legacy/exporter.py#L302-L316
+
+                        # Get a list of (vertex group ID, weight) items sorted in descending order of weight
+                        # Take the top 4 elements, for the top 4 most deforming bones
+                        # Normalize the weights so they sum to 1
+                        b_weights = [(v_groups[g.group].name, g.weight) for g in sorted(
+                            v.groups, key=lambda g: 1 - g.weight) if v_groups[g.group].name in coord_indices_dict]
+                        if len(b_weights) > 4:
+                            b_weights = b_weights[:4]
+                        elif len(b_weights) < 4:
+                            # Add zeroed elements to b_weights so it's 4 elements long
+                            b_weights += [(0, 0.0)] * (4 - len(b_weights))
+
+                        weight_sum = sum(weight for (_, weight) in b_weights)
+                        if weight_sum > 0.0:
+                            vert.bone_ids = [coord_indices_dict.get(bw[0], 0) for bw in b_weights]
+                            vert.bone_weights = [bw[1] / weight_sum for bw in b_weights]
+                        else:
+                            vert.bone_ids = [0] * 4
+                            vert.bone_weights = [0] * 3 + [1]
+                        
+                vertices_dict = IterativeDict()
+                vertices_dict_get = vertices_dict.get_or_next
+
+                for verts in vertices:
+                    # Get the vertex indices to make the face
+                    faces[face_index] = [vertices_dict_get(x) for x in verts]
+                    face_index += 1
+
+                vertices = list(vertices_dict)
+
+                # Free the mesh data after we're done with it
+                #mesh.free_normals_split()
+                #mesh.free_tangents()
+
+                if len(vertices) < 3:
+                    self.operator.report(
+                        {'WARNING'}, f'[NUD MESH] {obj.name} has no valid faces and will be skipped.')
+                    continue
+
+                if len(vertices) > NudMesh.MAX_VERTICES:
+                    self.operator.report(
+                        {'WARNING'}, f'[NUD MESH] {obj.name} has {len(vertices)} vertices (limit is {NudMesh.MAX_VERTICES}) and will be skipped.')
+                    continue
+
+                if len(faces) > NudMesh.MAX_FACES:
+                    self.operator.report(
+                        {'WARNING'}, f'[NUD MESH] {obj.name} has {len(faces)} faces (limit is {NudMesh.MAX_FACES}) and will be skipped.')
+                    continue
+
+                mat_mesh = NudMesh()
+                mat_mesh.vertices = vertices
+                mat_mesh.faces = faces
+
+                # set the correct vertex/bone/uv formats
+
+                #we'll set the vertex type to 3 if the mesh is deformable and 7 if not
+                if RiggingFlag.SKINNED in chunk.rigging_flag: 
+                    mat_mesh.vertex_type = int(3)
+                    mat_mesh.bone_type = int(0x10)
+                    mat_mesh.face_flag = int(4)
+                else:
+                    mat_mesh.vertex_type = int(7)
+                    mat_mesh.bone_type = int(0x00)
+                    mat_mesh.face_flag = int(0x00)
+                
+                mat_mesh.uv_type = int(2)
+
+                # Add the material chunk for this mesh
+                if len(obj.data.materials) == 0:
+                    self.operator.report(
+                        {'WARNING'}, f'[NUD MESH] {obj.name} has no material and will be skipped.')
+                    continue
+                else:
+                    mat = self.make_xfbin_material(obj.data.materials[i], clump, context)
+                
+                chunk.material_chunks.append(mat)
+
+                # Get the material properties of this mesh
+                mat_mesh.materials = self.make_nud_materials(obj, obj.data.materials[i], clump, context)
+
+                # Only add the mesh if it doesn't exceed the vertex and face limits
+                mesh_group.meshes.append(mat_mesh)
+
             model_chunks.append(chunk)
+
 
         return model_chunks
 
@@ -882,57 +1061,151 @@ class XfbinExporter:
         return modelhit
         
 
-    def make_nud_materials(self, pg: NudMeshPropertyGroup, clump: NuccChunkClump, context) -> List[NudMaterial]:
-        materials = list()
+    def make_nud_materials(self, model, material, clump: NuccChunkClump, context) -> List[NudMaterial]:
+        shaders = list()
+        blender_mat = material
 
-        # There is a maximum of 4 materials per mesh
-        for mat in pg.materials[:4]:
-            mat: NudMaterialPropertyGroup
+        print(f'Exporting material {model.name}')
+
+        model_props: NudPropertyGroup = model.xfbin_nud_data
+
+        mat_props = blender_mat.xfbin_material_data
+
+        model_flags = RiggingFlag(reduce(lambda x, y: int(x) |
+                                                    int(y), model_props.rigging_flag.union(model_props.rigging_flag_extra), 0))
+
+        # Get the main shader
+        if len(mat_props.NUD_Shaders) > 0:
+            shader_count = 0
+
+            shader = mat_props.NUD_Shaders[0]
+            shader: NUD_ShaderPropertyGroup
             m = NudMaterial()
-            m.flags = hex_str_to_int(mat.material_id)
+            m.flags = hex_str_to_int(shader.name)
 
-            m.sourceFactor = mat.source_factor
-            m.destFactor = mat.dest_factor
-            m.alphaTest = mat.alpha_test
-            m.alphaFunction = mat.alpha_function
-            m.refAlpha = mat.ref_alpha
-            m.cullMode = mat.cull_mode
-            m.unk1 = mat.unk1
-            m.unk2 = mat.unk2
-            m.zBufferOffset = mat.zbuffer_offset
+            shader_count += 1
+
+            m.sourceFactor = shader.source_factor
+            m.destFactor = shader.destination_factor
+            m.alphaTest = shader.alpha_test
+            m.alphaFunction = shader.alpha_function
+            m.refAlpha = shader.alpha_reference
+            m.cullMode = int(shader.cull_mode)
+            m.unk1 = shader.unk1
+            m.unk2 = shader.unk2
+            m.zBufferOffset = shader.zbuffer_offset
 
             m.textures = list()
-            for texture in mat.textures:
-                texture: NudMaterialTexturePropertyGroup
+            for texture in mat_props.NUTextures:
                 t = NudMaterialTexture()
 
                 t.unk0 = texture.unk0
-                t.mapMode = texture.map_mode
-                t.wrapModeS = texture.wrap_mode_s
-                t.wrapModeT = texture.wrap_mode_t
-                t.minFilter = texture.min_filter
-                t.magFilter = texture.mag_filter
-                t.mipDetail = texture.mip_detail
+                t.mapMode = texture.mapMode
+                t.wrapModeS = int(texture.wrapModeS)
+                t.wrapModeT = int(texture.wrapModeT)
+                t.minFilter = int(texture.minFilter)
+                t.magFilter = int(texture.magFilter)
+                t.mipDetail = texture.mipDetail
                 t.unk1 = texture.unk1
                 t.unk2 = texture.unk2
 
                 m.textures.append(t)
 
             m.properties = list()
-            for prop in mat.material_props:
-                prop: NudMaterialPropPropertyGroup
+            for param in shader.shader_params:
+                param: NUD_ShaderParamPropertyGroup
                 p = NudMaterialProperty()
-                p.name = prop.prop_name
+                p.name = param.name
 
                 p.values = list()
-                for i in range(prop.count):
-                    p.values.append(prop.values[i].value)
+                for i in range(param.count):
+                    p.values.append(param.values[i].value)
 
                 m.properties.append(p)
 
-            materials.append(m)
+            shaders.append(m)
 
-        return materials
+            # make extra shaders depending on the flags
+            if RiggingFlag.OUTLINE in model_flags:
+                shader = mat_props.NUD_Shaders[shader_count]
+                shader_count += 1
+                m = NudMaterial()
+                
+                m.flags = hex_str_to_int(shader.name)
+
+                shader_count += 1
+
+                m.sourceFactor = shader.source_factor
+                m.destFactor = shader.destination_factor
+                m.alphaTest = shader.alpha_test
+                m.alphaFunction = shader.alpha_function
+                m.refAlpha = shader.alpha_reference
+                m.cullMode = int(shader.cull_mode)
+                m.unk1 = shader.unk1
+                m.unk2 = shader.unk2
+                m.zBufferOffset = shader.zbuffer_offset
+
+                m.textures = list()
+                for texture in mat_props.NUTextures:
+                    t = NudMaterialTexture()
+
+                    t.unk0 = texture.unk0
+                    t.mapMode = texture.mapMode
+                    t.wrapModeS = int(texture.wrapModeS)
+                    t.wrapModeT = int(texture.wrapModeT)
+                    t.minFilter = int(texture.minFilter)
+                    t.magFilter = int(texture.magFilter)
+                    t.mipDetail = texture.mipDetail
+                    t.unk1 = texture.unk1
+                    t.unk2 = texture.unk2
+
+                    m.textures.append(t)
+
+                m.properties = list()
+                for param in shader.shader_params:
+                    param: NUD_ShaderParamPropertyGroup
+                    p = NudMaterialProperty()
+                    p.name = param.name
+
+                    p.values = list()
+                    for i in range(param.count):
+                        p.values.append(param.values[i].value)
+
+                    m.properties.append(p)
+
+                shaders.append(m)
+            
+            if RiggingFlag.BLUR in model_flags:
+                shader_count += 1
+                m = NudMaterial()
+                
+                #copy the first shader
+                for attr, value in shaders[0].__dict__.items():
+                    setattr(m, attr, value)
+
+                #change the shader name depending on the skinning flag
+                if RiggingFlag.UNSKINNED in model_flags:
+                    m.flags = 0x0000E000
+                else:
+                    m.flags = 0x0000E100
+
+                shaders.append(m)
+            
+            if RiggingFlag.SHADOW in model_flags:
+                #shader = mat_props.NUD_Shaders[shader_count]
+                shader_count += 1
+                m = NudMaterial()
+
+                #copy the first shader
+                for attr, value in shaders[0].__dict__.items():
+                    setattr(m, attr, value)
+
+                #get the correct shader name
+                m.flags = 0x0000E001
+
+                shaders.append(m)
+
+        return shaders
 
     def make_xfbin_material(self, mat, clump: NuccChunkClump, context) -> NuccChunkMaterial:
         pg = mat.xfbin_material_data
@@ -1001,7 +1274,6 @@ class XfbinExporter:
                                 image.pack()
                                 image.source = 'FILE'
                                 image_data = image.packed_file.data
-                            print(image_data[:4])
                             nuttex: NutTexture = DDS_to_NutTexture(read_dds(image_data))
                             t.nut.textures.append(nuttex)
                             t.nut.texture_count += 1
@@ -1026,7 +1298,9 @@ class XfbinExporter:
         for attr, value in g.__dict__.items():
             setattr(g2, attr, value)
         chunk.texture_groups.append(g)
-        chunk.texture_groups.append(g2)
+        
+        if pg.texGroupsCount > 1:
+            chunk.texture_groups.append(g2)
 
         return chunk
     
@@ -1080,7 +1354,7 @@ class XfbinExporter:
         dynamics.ColSphereCount = len(dynamics_data.collision_spheres)
 
         #update dynamics chunk values before exporting
-        bpy.ops.object.update_dynamics()
+        #bpy.ops.object.update_dynamics()
        
         dynamics.SPGroup = list()
         for dynamic in sorted(dynamics_data.spring_groups, key= lambda x: x.spring_group_index): 

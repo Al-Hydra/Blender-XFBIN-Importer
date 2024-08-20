@@ -5,7 +5,9 @@ from bpy.props import PointerProperty
 from bpy.types import PropertyGroup
 
 from .exporter import ExportXfbin, menu_func_export
-from .importer import ImportXFBIN, menu_func_import
+from .importer import (ImportXFBIN, DropXFBIN, XFBIN_FH_import, menu_func_import, XFBIN_UL_IMPORT_LIST, XFBIN_OT_IMPORT_ADD_FILE,
+                        XFBIN_OT_IMPORT_REMOVE_FILE, XFBIN_OT_IMPORT_CLEAR_FILES,
+                        XFBIN_OT_IMPORT_MOVE_FILE, XFBIN_IMPORT_FILES)
 from .panels.anm_chunks_panel import (AnmChunksListPropertyGroup,
                                       anm_chunks_classes)
 from .panels.clump_panel import (ClumpPropertyGroup, clump_classes,
@@ -40,6 +42,14 @@ classes = (
     #CustomNodeTest,
     *common_classes,
     ImportXFBIN,
+    DropXFBIN,
+    XFBIN_FH_import,
+    XFBIN_UL_IMPORT_LIST,
+    XFBIN_OT_IMPORT_ADD_FILE,
+    XFBIN_OT_IMPORT_REMOVE_FILE,
+    XFBIN_OT_IMPORT_CLEAR_FILES,
+    XFBIN_OT_IMPORT_MOVE_FILE,
+    XFBIN_IMPORT_FILES,
     ExportXfbin,
     *texture_chunks_classes,
     *material_classes,
@@ -80,7 +90,7 @@ def register():
 
     # Define a new class with exec() because we can't set type hints with type()
     pointers_def = 'class XfbinPointersGroup(PropertyGroup): '
-    for pg_type in (EmptyPropertyGroup, *clump_property_groups, *nud_property_groups, *nud_mesh_property_groups,
+    for pg_type in (EmptyPropertyGroup, XFBIN_IMPORT_FILES,*clump_property_groups, *nud_property_groups, *nud_mesh_property_groups,
     *texture_chunks_property_groups, *dynamics_chunks_property_groups, *model_hit_property_groups, *material_property_groups):
         pointers_def += f'{pg_type.__name__}: PointerProperty(type={pg_type.__name__}); '
 

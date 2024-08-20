@@ -14,7 +14,7 @@ from ...xfbin_lib.xfbin.structure.nucc import (ClumpModelGroup,
                                                NuccChunkPrimitiveVertex,
                                                NuccChunkModelPrimitiveBatch)
 from ..common.helpers import format_hex_str, hex_str_to_int, int_to_hex_str, XFBIN_DYNAMICS_OBJ, XFBIN_TEXTURES_OBJ 
-from .common import (EmptyPropertyGroup, draw_copy_paste_ops, draw_xfbin_list,
+from .common import (EmptyPropertyGroup, ObjectPropertyGroup, draw_copy_paste_ops, draw_xfbin_list,
                      matrix_prop)
 
 
@@ -47,7 +47,7 @@ class ClumpModelGroupPropertyGroup(PropertyGroup):
     )
 
     models: CollectionProperty(
-        type=EmptyPropertyGroup,
+        type=ObjectPropertyGroup,
     )
 
     model_index: IntProperty()
@@ -108,7 +108,7 @@ class ClumpPropertyGroup(PropertyGroup):
     )
 
     models: CollectionProperty(
-        type=EmptyPropertyGroup,
+        type=ObjectPropertyGroup,
     )
 
     model_index: IntProperty()
@@ -188,10 +188,10 @@ class ClumpModelGroupPropertyPanel(Panel):
             model_index = group.model_index
 
             if group.models and model_index >= 0:
-                model: EmptyPropertyGroup = group.models[model_index]
+                model: ObjectPropertyGroup = group.models[model_index]
                 box = box.box()
 
-                box.prop_search(model, 'empty', context.collection, 'all_objects',
+                box.prop_search(model, 'object', context.collection, 'all_objects',
                                 text='Model Object', icon='OUTLINER_OB_EMPTY')
 
 
@@ -234,10 +234,10 @@ class ClumpPropertyPanel(Panel):
 
 
         if data.models and model_index >= 0:
-            model: EmptyPropertyGroup = data.models[model_index]
+            model: ObjectPropertyGroup = data.models[model_index]
             box = layout.box()
 
-            box.prop_search(model, 'empty', context.collection, 'all_objects',
+            box.prop_search(model, 'object', context.collection, 'all_objects',
                             text='Model Object', icon='OUTLINER_OB_EMPTY')
 
 

@@ -1,10 +1,10 @@
-# Blender-XFBIN-Importer
- Blender import/export script for CyberConnect2 games XFBIN files. Supports Blender versions 4.0 and above.
+# cc2_xfbin_blender
+ Blender import/export script for CyberConnect2 games XFBIN files. Supports Blender versions 2.90 and above.
  
  Uses [xfbin_lib](https://github.com/SutandoTsukai181/xfbin_lib) for reading/writing XFBIN files.
 
 # Installing
-Download the [latest release](https://github.com/Al-Hydra/Blender-XFBIN-Importer/releases/latest) and install it in Blender. To do so, follow the instructions in the [official Blender manual](https://docs.blender.org/manual/en/latest/editors/preferences/addons.html) for installing add-ons, or follow the brief instructions below.
+Download the [latest release](https://github.com/SutandoTsukai181/cc2_xfbin_blender/releases/latest) and install it in Blender. To do so, follow the instructions in the [official Blender manual](https://docs.blender.org/manual/en/latest/editors/preferences/addons.html) for installing add-ons, or follow the brief instructions below.
 
 Open the `Edit` -> `Preferences` window from the menu bar, go to `Add-ons`, click on the `Install` button, and select the release zip you downloaded. Then, enable the script by checking the box next to it.
 

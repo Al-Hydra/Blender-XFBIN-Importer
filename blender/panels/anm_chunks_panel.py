@@ -3,14 +3,21 @@ from typing import List, Optional
 import bpy
 from bpy.props import (BoolProperty, CollectionProperty, IntProperty,
                        StringProperty)
-from bpy.types import Action, Panel, PropertyGroup
+from bpy.types import Action, Panel, PropertyGroup, UIList
 
 from ...xfbin_lib.xfbin.structure.nucc import NuccChunkAnm, NuccChunkCamera
 from ...xfbin_lib.xfbin.structure.anm import AnmClump, AnmBone, AnmModel, AnmKeyframe
 from ..common.helpers import XFBIN_ANMS_OBJ
 from ..importer import make_actions
-from .common import draw_xfbin_list
+from .common import draw_xfbin_list, XFBIN_OPERATORS
 
+#UI Lists
+
+class XFBIN_UL_ANM_CLUMP(UIList):
+    
+        def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+            layout.label(text=item.name)
+            layout.prop_search(item, 'name', bpy.data, 'armatures', text="")
 
 class AnmClumpBonePropertyGroup(PropertyGroup):
     name: StringProperty()
@@ -154,6 +161,7 @@ class AnmChunksPropertyPanel(Panel):
         layout = self.layout
         data: AnmChunksListPropertyGroup = obj.xfbin_anm_chunks_data
         draw_xfbin_list(layout, 0, data, 'xfbin_anm_chunks_data', 'anm_chunks', 'anm_chunk_index')
+        #draw_xfbin_list_search(layout, 0, data, 'xfbin_anm_chunks_data', 'anm_chunks', 'anm_chunk_index')
         anm_index = data.anm_chunk_index
 
         box = layout.box()
@@ -178,19 +186,20 @@ class AnmChunksPropertyPanel(Panel):
             layout.label(text="Clumps:")
             anm = data.anm_chunks[anm_index]
             clump = anm.anm_clumps[anm.clump_index]
-            draw_xfbin_list(layout, 1, anm, 'xfbin_anm_chunks_data.anm_chunks[anm_chunk_index]', 'anm_clumps', 'clump_index')
+            draw_xfbin_list(layout, 1, anm, str(clump), 'anm_clumps', 'clump_index')
+            #draw_xfbin_list_search(layout, 0, anm, str(clump), 'anm_clumps', 'clump_index', bpy.data, 'objects')
 
             #models
             layout.label(text="Models:")
-            draw_xfbin_list(layout, 2, clump, 'xfbin_anm_chunks_data.anm_chunks[anm_chunk_index].anm_clumps[clump_index]', 'models', 'model_index')
+            draw_xfbin_list(layout, 2, clump, str(clump.models), 'models', 'model_index')
 
             #bones
             layout.label(text="Bones & Materials:")
-            draw_xfbin_list(layout, 3, clump, 'xfbin_anm_chunks_data.anm_chunks[anm_chunk_index].anm_clumps[clump_index]', 'bones', 'bone_index')
+            draw_xfbin_list(layout, 3, clump, str(clump), 'bones', 'bone_index')
 
             # cameras
             layout.label(text="Cameras:")
-            draw_xfbin_list(layout, 4, anm, 'xfbin_anm_chunks_data.anm_chunks[anm_chunk_index]', 'camera', 'camera_index')
+            draw_xfbin_list(layout, 4, anm, str(anm), 'camera', 'camera_index')
 
 class PlayAnimation(bpy.types.Operator):
     bl_idname = 'obj.play_animation'
@@ -217,7 +226,7 @@ class PlayAnimation(bpy.types.Operator):
             #get all clumps
             clumps = []
             for clump in chunk.anm_clumps:
-                c = bpy.context.view_layer.objects.get(f'{clump.name} [C]')
+                c = bpy.context.view_layer.objects.get(clump.name)
                 if c:
                     clumps.append(c)
             #print(clumps)
@@ -225,7 +234,7 @@ class PlayAnimation(bpy.types.Operator):
             for clump in clumps:
                 #get action
                 #print(chunk.name)
-                action = bpy.data.actions.get(f'{chunk.name} ({clump.name[:-4]})')
+                action = bpy.data.actions.get(f'{chunk.name} ({clump.name})')
                 #print(action)
                 if action:
                     #set action

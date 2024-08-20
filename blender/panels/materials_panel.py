@@ -1,13 +1,13 @@
 import bpy
 from bpy.props import (BoolProperty, CollectionProperty, FloatProperty,
-                       FloatVectorProperty, IntProperty, StringProperty)
+                       FloatVectorProperty, IntProperty, StringProperty, EnumProperty)
 from bpy.types import Object, Panel, PropertyGroup
 
 from ...xfbin_lib.xfbin.structure.nucc import (MaterialTextureGroup,
                                                NuccChunkMaterial,
                                                NuccChunkTexture)
-from .common import (EmptyPropertyGroup, draw_copy_paste_ops, draw_xfbin_list,
-                     matrix_prop)
+from .common import (FloatPropertyGroup, draw_copy_paste_ops, draw_xfbin_list,
+                     matrix_prop_group)
 from ...xfbin_lib.xfbin.structure.nut import Pixel_Formats
 from ...xfbin_lib.xfbin.structure import dds
 from ...xfbin_lib.xfbin.structure.br import br_dds
@@ -22,8 +22,6 @@ class XFBIN_UL_MatTextures(bpy.types.UIList):
 
             #row.prop(item, 'path', text='',emboss=False, icon='FILE_FOLDER')
             #row.prop(item, 'reference', text='Reference', icon='FILE_TICK', toggle=True)
-
-
 
 
 class XFBIN_UL_SelectTexture(bpy.types.UIList):
@@ -100,7 +98,6 @@ class XFBIN_MatTexture_OT_Move(bpy.types.Operator):
 
         return {'FINISHED'}
 
-
 class XFBIN_MatTexture_OT_Duplicate(bpy.types.Operator):
     bl_idname = 'xfbin_mat.texture_duplicate'
     bl_label = 'Copy Texture'
@@ -157,62 +154,6 @@ class NutSubTexturePropertyGroup(PropertyGroup):
     height: StringProperty()
 
     pixel_format: StringProperty()
-
-
-class GlobalNutPropertyGroup(PropertyGroup):
-    def update_texture_name(self, context):
-        self.update_name()
-    
-    def update_count(self, context):
-        if self.texture_count > len(self.textures):
-            for i in range(self.texture_count - len(self.textures)):
-                self.textures.add()
-        elif self.texture_count < len(self.textures):
-            for i in range(len(self.textures) - self.texture_count):
-                self.textures.remove(-1)
-
-    texture_name: StringProperty(
-        name='Texture Name',
-        default='new_texture',
-        update=update_texture_name,
-    )
-
-    path: StringProperty(
-        name='Chunk Path',
-        description='XFBIN chunk path that will be used for identifying the texture in the XFBIN.\n'
-        'Should be the same as the path of the texture in the XFBIN to inject to.\n'
-        'Example: "c/1nrt/tex/1nrtbody.nut"',
-
-    )
-
-    textures: CollectionProperty(
-        type=NutSubTexturePropertyGroup,
-    )
-
-    texture_index: IntProperty()
-
-    texture_count: IntProperty(min=0, update= update_count)
-
-    reference: BoolProperty(
-        name='Reference',
-        default=False,
-    )
-
-    def update_name(self):
-        self.name = self.texture_name
-
-    def init_data(self, chunk: NuccChunkTexture):
-        self.texture_name = chunk.name
-        self.path = chunk.filePath
-        if chunk.nut:
-            self.texture_count = chunk.nut.texture_count
-
-            self.textures.clear()
-            for i in range(chunk.nut.texture_count):
-                t: NutSubTexturePropertyGroup = self.textures.add()
-                t.texture = bpy.data.images.get(f"{chunk.name}_{i}")
-        else:
-            self.reference = True
 
 
 class MaterialNutTexturePropertyGroup(PropertyGroup):
@@ -305,12 +246,382 @@ class TextureGroupPropertyGroup(PropertyGroup):
 class XfbinMaterialTexturesPropertyGroup(PropertyGroup):
     def update_texture(self, context):
         self.texture_name = self.texture.name
+    
     texture: bpy.props.PointerProperty(type=XfbinTextureChunkPropertyGroup)
     texture_name: StringProperty()
+
+    magFilter: EnumProperty(default='1', items=(
+                            ('1', 'Nearest', ''),
+                            ('2', 'Linear', ''),
+                            ))
+    
+    minFilter: EnumProperty(default='1', items=(
+                            ('1', 'Nearest', ''),
+                            ('2', 'Linear', ''),
+                            ('3', 'Nearest Mipmap Nearest', ''),
+                            ('4', 'Linear Mipmap Nearest', ''),
+                            ('5', 'Nearest Mipmap Linear', ''),
+                            ('6', 'Linear Mipmap Linear', ''),
+                            ))
+    mapMode: IntProperty(default=0)
+    mipDetail: IntProperty()
+    wrapModeS: EnumProperty(default='1', items=(
+                            ('1', 'Repeat', ''),
+                            ('2', 'Mirror', ''),
+                            ('3', 'Extend', ''),
+                            ('4', 'Clip', ''),
+                            ('5', 'ExtendUnk', ''),
+                            ('6', 'Extend & Mirror', '')
+                        ))
+    
+    wrapModeT: EnumProperty(default='1', items=(
+                            ('1', 'Repeat', ''),
+                            ('2', 'Mirror', ''),
+                            ('3', 'Extend', ''),
+                            ('4', 'Clip', ''),
+                            ('5', 'ExtendUnk', ''),
+                            ('6', 'Extend & Mirror', '')
+                        ))
+    
+    unk0: IntProperty(default=0)
+    unk1: IntProperty(default=0)
+    unk2: IntProperty(default=7783)
 
 
     def init_data(self, chunk):
         self.texture_name = chunk.name
+    
+
+    def init_tex_props(self, tex):
+        self.magFilter = str(tex.magFilter)
+        self.minFilter = str(tex.minFilter)
+        self.mapMode = tex.mapMode
+        self.mipDetail = tex.mipDetail
+        self.wrapModeS = str(tex.wrapModeS)
+        self.wrapModeT = str(tex.wrapModeT)
+
+        self.unk0 = tex.unk0
+        self.unk1 = tex.unk1
+        self.unk2 = tex.unk2
+
+
+class XFBIN_UL_MatShaders(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        row = layout.row(align=True)
+        row.prop(item, 'name',emboss= False, text='', icon='MATERIAL')
+
+
+class XFBIN_MatShader_OT_Add(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.shader_add'
+    bl_label = 'Add Shader'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        shader: NUD_ShaderPropertyGroup = mat.NUD_Shaders.add()
+        mat.NUD_Shader_index = len(mat.NUD_Shaders) - 1
+        return {'FINISHED'}
+
+class XFBIN_MatShader_OT_Remove(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.shader_remove'
+    bl_label = 'Remove Shader'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        if len(mat.NUD_Shaders) > 0:
+            mat.NUD_Shaders.remove(mat.NUD_Shader_index)
+            #move selection to previous item
+            mat.NUD_Shader_index = max(0, mat.NUD_Shader_index - 1)
+
+        return {'FINISHED'}
+
+
+class XFBIN_MatShader_OT_Move(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.shader_move'
+    bl_label = 'Move Shader'
+
+    direction: bpy.props.EnumProperty(
+        items=(
+            ('UP', 'Up', ''),
+            ('DOWN', 'Down', ''),
+        ),
+        name='Direction',
+    )
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        shader_index = mat.NUD_Shader_index
+
+        # Get the new index based on the direction
+        new_index = shader_index - 1 if self.direction == 'UP' else shader_index + 1
+
+        # Ensure the new index is within the valid range
+        new_index = max(0, min(new_index, len(mat.NUD_Shaders) - 1))
+
+        # Move the item
+        mat.NUD_Shaders.move(shader_index, new_index)
+
+        # Update the UIList to reflect the moved item and update the selection
+        mat.NUD_Shader_index = new_index
+
+        return {'FINISHED'}
+
+class XFBIN_MatShader_OT_Duplicate(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.shader_duplicate'
+    bl_label = 'Copy Shader'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        shader_index = mat.NUD_Shader_index
+
+        if len(mat.NUD_Shaders) > 0:
+            newShader: NUD_ShaderPropertyGroup = mat.NUD_Shaders.add()
+            newShader.init_copy(mat.NUD_Shaders[shader_index])
+
+        return {'FINISHED'}
+
+
+class XFBIN_UL_MatParams(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        row = layout.row(align=True)
+        row.prop(item, 'name',emboss= False, text='')
+        row.split(factor=0.5)
+        row.prop(item, 'count', text='Count')
+
+class XFBIN_MatParam_OT_Add(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.param_add'
+    bl_label = 'Add Param'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        shader_index = mat.NUD_Shader_index
+        if shader_index < 0:
+            return {'CANCELLED'}
+        
+        shader: NUD_ShaderPropertyGroup = mat.NUD_Shaders[shader_index]
+        param: NUD_ShaderParamPropertyGroup = shader.shader_params.add()
+        shader.NUD_ShaderParam_index = len(shader.shader_params) - 1
+        return {'FINISHED'}
+
+class XFBIN_MatParam_OT_Remove(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.param_remove'
+    bl_label = 'Remove Param'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        shader_index = mat.NUD_Shader_index
+        if shader_index < 0:
+            return {'CANCELLED'}
+        
+        shader: NUD_ShaderPropertyGroup = mat.NUD_Shaders[shader_index]
+        if len(shader.shader_params) > 0:
+            shader.shader_params.remove(shader.NUD_ShaderParam_index)
+            #move selection to previous item
+            shader.NUD_ShaderParam_index = max(0, shader.NUD_ShaderParam_index - 1)
+
+        return {'FINISHED'}
+    
+class XFBIN_MatParam_OT_Move(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.param_move'
+    bl_label = 'Move Param'
+
+    direction: bpy.props.EnumProperty(
+        items=(
+            ('UP', 'Up', ''),
+            ('DOWN', 'Down', ''),
+        ),
+        name='Direction',
+    )
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        shader_index = mat.NUD_Shader_index
+        if shader_index < 0:
+            return {'CANCELLED'}
+        
+        shader: NUD_ShaderPropertyGroup = mat.NUD_Shaders[shader_index]
+        param_index = shader.NUD_ShaderParam_index
+
+        # Get the new index based on the direction
+        new_index = param_index - 1 if self.direction == 'UP' else param_index + 1
+
+        # Ensure the new index is within the valid range
+        new_index = max(0, min(new_index, len(shader.shader_params) - 1))
+
+        # Move the item
+        shader.shader_params.move(param_index, new_index)
+
+        # Update the UIList to reflect the moved item and update the selection
+        shader.NUD_ShaderParam_index = new_index
+
+        return {'FINISHED'}
+    
+class XFBIN_MatParam_OT_Duplicate(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.param_duplicate'
+    bl_label = 'Copy Param'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        shader_index = mat.NUD_Shader_index
+        if shader_index < 0:
+            return {'CANCELLED'}
+        
+        shader: NUD_ShaderPropertyGroup = mat.NUD_Shaders[shader_index]
+        param_index = shader.NUD_ShaderParam_index
+
+        if len(shader.shader_params) > 0:
+            newParam: NUD_ShaderParamPropertyGroup = shader.shader_params.add()
+            newParam.init_copy(shader.shader_params[param_index])
+
+        return {'FINISHED'}
+    
+
+
+
+class NUD_ShaderParamPropertyGroup(PropertyGroup):
+    
+    def update_count(self, context):
+        if self.count > len(self.values):
+            for i in range(self.count - len(self.values)):
+                self.values.add()
+        elif self.count < len(self.values):
+            for i in range(len(self.values) - self.count):
+                self.values.remove(-1)
+    
+    name: StringProperty()
+    count: IntProperty(update = update_count, min=0, max=255)
+    values: CollectionProperty(
+        type=FloatPropertyGroup,
+    )
+
+    index: IntProperty()
+
+    def init_data(self, param):
+        self.name = param.name
+        for value in param.values:
+            v = self.values.add()
+            v.value = value
+        
+        self.count = len(param.values)
+    
+    def init_copy(self, param):
+        self.name = param.name
+        for value in param.values:
+            v = self.values.add()
+            v.value = value.value
+        
+        self.count = param.count
+
+
+class NUD_ShaderTexPropertyGroup(PropertyGroup):
+    name = StringProperty()
+    magFilter: IntProperty()
+    minFilter: IntProperty()
+    mapMode: IntProperty()
+    mipDetail: IntProperty()
+    wrapModeS: IntProperty()
+    wrapModeT: IntProperty()
+    unk0: IntProperty()
+    unk1: IntProperty()
+    unk2: IntProperty()
+
+
+    def init_data(self, tex):
+        self.magFilter = tex.magFilter
+        self.minFilter = tex.minFilter
+        self.mapMode = tex.mapMode
+        self.mipDetail = tex.mipDetail
+        self.wrapModeS = tex.wrapModeS
+        self.wrapModeT = tex.wrapModeT
+        self.unk0 = tex.unk0
+        self.unk1 = tex.unk1
+        self.unk2 = tex.unk2
+
+
+class NUD_ShaderPropertyGroup(PropertyGroup):
+    def update_shader(self, context):
+        self.name = self.name
+    
+    name: StringProperty(name='Name')
+    source_factor: IntProperty(name='Source Factor')
+    destination_factor: IntProperty(name='Destination Factor')
+    alpha_test: IntProperty(name='Alpha Test')
+    alpha_function: IntProperty(name='Alpha Function')
+    alpha_reference: IntProperty(name='Alpha Reference')
+    cull_mode: EnumProperty(
+        name='Cull Mode',
+        items=(
+            ("0", 'None', ''),
+            ("1028", 'Front', ''),
+            ("1029", 'Back', ''),
+        )
+    )
+    unk1: FloatProperty()
+    unk2: FloatProperty()
+    zbuffer_offset: IntProperty(name='Z Buffer Offset')
+
+    shader_params: CollectionProperty(
+        type=NUD_ShaderParamPropertyGroup,
+    )
+
+    NUD_ShaderParam_index: IntProperty()
+
+    shader_tex_props: CollectionProperty(
+        type=NUD_ShaderTexPropertyGroup,
+    )
+
+
+    def init_data(self, shader):
+        self.name = str(hex(shader.flags))
+        self.source_factor = shader.sourceFactor
+        self.destination_factor = shader.destFactor
+        self.alpha_test = shader.alphaTest
+        self.alpha_function = shader.alphaFunction
+        self.alpha_reference = shader.refAlpha
+        self.cull_mode = str(shader.cullMode)
+        self.unk1 = shader.unk1
+        self.unk2 = shader.unk2
+        self.zbuffer_offset = shader.zBufferOffset
+
+        self.shader_params.clear()
+        for param in shader.properties:
+            p = self.shader_params.add()
+            p.init_data(param)
+        
+        self.shader_tex_props.clear()
+        for tex in shader.textures:
+            t = self.shader_tex_props.add()
+            t.init_data(tex)
+    
+    def init_copy(self, shader):
+        self.name = shader.name
+        self.source_factor = shader.source_factor
+        self.destination_factor = shader.destination_factor
+        self.alpha_test = shader.alpha_test
+        self.alpha_function = shader.alpha_function
+        self.alpha_reference = shader.alpha_reference
+        self.cull_mode = shader.cull_mode
+        self.unk1 = shader.unk1
+        self.unk2 = shader.unk2
+        self.zbuffer_offset = shader.zbuffer_offset
+
+        self.shader_params.clear()
+        for param in shader.shader_params:
+            p = self.shader_params.add()
+            p.init_copy(param)
+        
+        self.shader_tex_props.clear()
+        for tex in shader.shader_tex_props:
+            t = self.shader_tex_props.add()
+            t.init_data(tex)
+        
 
 
 class XfbinMaterialPropertyGroup(PropertyGroup):
@@ -340,6 +651,8 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
     fallOff: FloatProperty(name='fallOff')
     outlineID: FloatProperty(name='outlineID')
 
+    texGroupsCount: IntProperty(name='Texture Groups Count', min=0, max=4)
+
     '''texture_groups: CollectionProperty(
         type=TextureGroupPropertyGroup,
         name='Texture Groups',
@@ -353,6 +666,13 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
     )
 
     NUT_index: IntProperty()
+
+    NUD_Shaders: CollectionProperty(
+        type=NUD_ShaderPropertyGroup,
+        name='NUD Shaders',
+    )
+
+    NUD_Shader_index: IntProperty()
 
     def update_name(self):
         self.name = self.material_name
@@ -381,8 +701,9 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
         self.outlineID = 0.0
 
 
-    def init_data(self, material: NuccChunkMaterial):
+    def init_data(self, material: NuccChunkMaterial, mesh):
         self.material_name = material.name
+        print(f"material name: {material.name}")
 
         self.alpha = material.alpha * 0.003921569
         self.glare = material.glare
@@ -417,9 +738,24 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
             g = self.texture_groups.add()
             g.init_data(group)'''
         
+        self.texGroupsCount = len(material.texture_groups)
+        
+        mesh_shaders = mesh.materials
+        for shader in mesh_shaders:
+            if len(self.NUD_Shaders) >= 4:
+                break
+            
+            if str(hex(shader.flags)) in self.NUD_Shaders.keys():
+                print('shader already exists')
+                s = self.NUD_Shaders[str(hex(shader.flags))]
+                s.init_data(shader)
+            else:
+                s = self.NUD_Shaders.add()
+                s.init_data(shader)
+        
         self.NUTextures.clear()
         tex_group = material.texture_groups[0]
-        for chunk in tex_group.texture_chunks:
+        for i, chunk in enumerate(tex_group.texture_chunks):
             if bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(chunk.name):
                 texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks[chunk.name]
             else:
@@ -429,6 +765,12 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
             
             nut = self.NUTextures.add()
             nut.init_data(texture)
+            
+            #get the texture props from the first nud shader
+            nud_shader = self.NUD_Shaders[0]
+            tex = nud_shader.shader_tex_props[i]
+            nut.init_tex_props(tex)
+
 
 
 class XfbinMaterialPropertyPanel(Panel):
@@ -457,47 +799,137 @@ class XfbinMaterialPropertyPanel(Panel):
 
             row = box.row()
             row.prop(material, 'UV0')
+            row.prop(material, 'UV1')
+            row.prop(material, 'UV2')
+            row.prop(material, 'UV3')
             if material.UV0:
                 row = box.row()
                 row.prop(material, 'uvOffset0')
             
-            row = box.row() 
-            row.prop(material, 'UV1')
             if material.UV1:
                 row = box.row() 
                 row.prop(material, 'uvOffset1')
-            
-            row = box.row()
-            row.prop(material, 'UV2')
+                        
             if material.UV2:
                 row = box.row()
                 row.prop(material, 'uvOffset2')
-            
-            row = box.row()
-            row.prop(material, 'UV3')
+                        
             if material.UV3:
                 row = box.row()
                 row.prop(material, 'uvOffset3')
             
             row = box.row()
             row.prop(material, 'Blend')
+            row.prop(material, 'useFallOff')
+
+            row = box.row()
             if material.Blend:
-                row = box.row()
                 row.prop(material, 'blendRate')
                 row.prop(material, 'blendType')
-            
-            row = box.row()
-            row.prop(material, 'useFallOff')
+                        
             if material.useFallOff:
-                row = box.row()
                 row.prop(material, 'fallOff')
             
             row = box.row()
             row.prop(material, 'useOutlineID')
+            row = box.row()
             if material.useOutlineID:
-                row = box.row()
+                
                 row.prop(material, 'outlineID')
+
+            row.prop(material, 'texGroupsCount')
             
+
+class NUD_ShaderPropertyPanel(Panel):
+    bl_idname = 'MATERIAL_PT_NUD_shader'
+    bl_parent_id = 'MATERIAL_PT_XFBIN_material'
+    bl_label = 'NUD Shaders'
+
+    bl_space_type = 'PROPERTIES'
+    bl_context = 'object'
+    bl_region_type = 'WINDOW'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        return True
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+
+        col = layout.column()
+        row = col.row()
+
+        row.label(text='Shaders:')
+        row.label(text='Shader Params:')
+
+        row = col.row()
+
+        #draw_xfbin_list(row, 0, mat, f'{mat}', 'NUD_Shaders', 'NUD_Shader_index', enable_text=False)
+
+        row.template_list(
+            "XFBIN_UL_MatShaders", "", mat, "NUD_Shaders", mat, "NUD_Shader_index",
+            rows=4, maxrows=10, type='DEFAULT'
+        )   
+        col = row.column(align=True)
+        col.operator("xfbin_mat.shader_add", icon='ADD', text="")
+        col.operator("xfbin_mat.shader_remove", icon='REMOVE', text="")
+        col.operator("xfbin_mat.shader_duplicate", icon='DUPLICATE', text="")
+        col.operator("xfbin_mat.shader_move", icon='TRIA_UP', text="").direction = 'UP'
+        col.operator("xfbin_mat.shader_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
+
+
+        shader_index = mat.NUD_Shader_index
+
+        if mat.NUD_Shaders and shader_index >= 0:
+            shader: NUD_ShaderPropertyGroup = mat.NUD_Shaders[shader_index]
+            #draw_xfbin_list(row, 0, shader, f'{shader}', 'shader_params', 'NUD_ShaderParam_index', enable_text=False)
+
+            row.template_list(
+                "XFBIN_UL_MatParams", "", shader, "shader_params", shader, "NUD_ShaderParam_index",
+                rows=4, maxrows=10, type='DEFAULT'
+            )
+            col = row.column(align=False)
+            col.operator("xfbin_mat.param_add", icon='ADD', text="")
+            col.operator("xfbin_mat.param_remove", icon='REMOVE', text="")
+            col.operator("xfbin_mat.param_duplicate", icon='DUPLICATE', text="")
+            col.operator("xfbin_mat.param_move", icon='TRIA_UP', text="").direction = 'UP'
+            col.operator("xfbin_mat.param_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
+
+
+            param_index = shader.NUD_ShaderParam_index
+
+            row = layout.row()
+            if shader.shader_params and param_index >= 0:
+                param: NUD_ShaderParamPropertyGroup = shader.shader_params[param_index]
+                if param.count > 0:
+                    box = layout.box()
+                    row = box.row()
+                    matrix_prop_group(row, param, 'values', param.count, "Values")
+
+            box = layout.box()
+            row = box.row()
+            row.prop(shader, 'name')
+            row = box.row()
+            row.prop(shader, 'source_factor')
+            row.prop(shader, 'destination_factor')
+            row = box.row()
+            row.prop(shader, 'alpha_test')
+            row.prop(shader, 'alpha_function')
+            row.prop(shader, 'alpha_reference')
+            row = box.row()
+            row.prop(shader, 'cull_mode')
+            row.prop(shader, 'zbuffer_offset')
+            row = box.row()
+            row.prop(shader, 'unk1')
+            row.prop(shader, 'unk2')
+
+            #row = box.row()
+
 
 class NutTexturePropertyPanel(Panel):
     bl_idname = 'MATERIAL_PT_NUT_texture'
@@ -551,6 +983,24 @@ class NutTexturePropertyPanel(Panel):
                     row.prop(texture.textures[i], 'width', text='Width', emboss=False)
                     row.prop(texture.textures[i], 'height', text='Height', emboss=False)
                     row.prop(texture.textures[i], 'pixel_format', text='Format', emboss=False)
+            
+
+            #texture props panel
+            box = layout.box()
+            row = box.row()
+            row.prop(texture_n, 'magFilter')
+            row.prop(texture_n, 'minFilter')
+            row = box.row()
+            row.prop(texture_n, 'mapMode')
+            row.prop(texture_n, 'mipDetail')
+            row = box.row()
+            row.prop(texture_n, 'wrapModeS')
+            row.prop(texture_n, 'wrapModeT')
+            row = box.row()
+            row.prop(texture_n, 'unk0')
+            row.prop(texture_n, 'unk1')
+            row.prop(texture_n, 'unk2')
+
 
 '''
 class TextureGroupPropertyPanel(Panel):
@@ -653,6 +1103,9 @@ material_property_groups = (
     NutSubTexturePropertyGroup,
     MaterialNutTexturePropertyGroup,
     XfbinMaterialTexturesPropertyGroup,
+    NUD_ShaderParamPropertyGroup,
+    NUD_ShaderTexPropertyGroup,
+    NUD_ShaderPropertyGroup,
     #TextureGroupPropertyGroup,
     XfbinMaterialPropertyGroup,    
 )
@@ -660,12 +1113,23 @@ material_property_groups = (
 material_classes = (
     *material_property_groups,
     XFBIN_UL_MatTextures,
+    XFBIN_UL_MatShaders,
+    XFBIN_UL_MatParams,
     XFBIN_MatTexture_OT_Add,
     XFBIN_MatTexture_OT_Remove,
     XFBIN_MatTexture_OT_Move,
     XFBIN_MatTexture_Open,
     XFBIN_MatTexture_OT_Duplicate,
+    XFBIN_MatShader_OT_Add,
+    XFBIN_MatShader_OT_Remove,
+    XFBIN_MatShader_OT_Move,
+    XFBIN_MatShader_OT_Duplicate,
+    XFBIN_MatParam_OT_Add,
+    XFBIN_MatParam_OT_Remove,
+    XFBIN_MatParam_OT_Move,
+    XFBIN_MatParam_OT_Duplicate,
     XfbinMaterialPropertyPanel,
     #TextureGroupPropertyPanel,
     NutTexturePropertyPanel,
+    NUD_ShaderPropertyPanel,
 )

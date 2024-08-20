@@ -239,7 +239,7 @@ class DynamicsPropertyGroup(PropertyGroup):
 
 
     def bonename(self, index, clump):
-        return bpy.data.objects[f'{clump} [C]'].data.bones[index].name
+        return bpy.data.objects[f'{clump}'].data.bones[index].name
 
     def init_data(self, dynamics: NuccChunkDynamics):
         self.path = dynamics.filePath
@@ -266,7 +266,6 @@ class DynamicsPropertyGroup(PropertyGroup):
                     s.spring_group_index = i
             
 
-        
         # Add collision groups
         self.collision_spheres.clear()
         for i, colsphere in enumerate(dynamics.ColSphere):
@@ -508,7 +507,7 @@ class MakeCollisions(bpy.types.Operator):
 
         collection = bpy.data.collections.new(collection_name)
 
-        clump = bpy.context.object.xfbin_dynamics_data.clump_name + ' [C]'
+        clump = bpy.context.object.xfbin_dynamics_data.clump_name
 
         bpy.context.scene.collection.children.link(collection)
 
