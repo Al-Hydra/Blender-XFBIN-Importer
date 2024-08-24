@@ -523,6 +523,9 @@ class XfbinImporter:
                                 if bone_weight > 0:
                                     vertex_group_index = vertex_group_indices[clump.coord_chunks[bone_id].name]
                                     vert[deform][vertex_group_index] = bone_weight
+                        else:
+                            vertex_group_index = vertex_group_indices[nucc_model.coord_chunk.name]
+                            vert[deform][vertex_group_index] = 1
 
                     # Set up the indexing table inside the bmesh so lookups work
                     bm.verts.ensure_lookup_table()
@@ -574,12 +577,9 @@ class XfbinImporter:
                 mesh_obj.parent_bone = mesh_bone.name
             
             # If we're not going to parent it, transform the mesh by the bone's matrix
-            if mesh_bone and bone_range != (0, 0):                        
+            if mesh_bone:                        
                 blender_mesh.transform(nucc_model.coord_chunk.node.matrix)
-                #blender_mesh.transform(mesh_bone.matrix_local)
-            else:
-                mesh_obj.parent_type = 'BONE'
-            
+             
             #set active color
             mesh_obj.data.color_attributes.render_color_index = 0
             mesh_obj.data.color_attributes.active_color_index = 0

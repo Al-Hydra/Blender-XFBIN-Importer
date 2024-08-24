@@ -613,8 +613,26 @@ class XfbinExporter:
             chunk.light_mode_id = nud_data.light_mode
             chunk.light_category = nud_data.light_category
 
+            # Create the nud
+            chunk.nud = Nud()
+            chunk.nud.name = chunk.name
+
+            # Always treat nuds as having only 1 mesh group
+            chunk.nud.mesh_groups = [NudMeshGroup()]
+            mesh_group = chunk.nud.mesh_groups[0]
+            mesh_group.name = chunk.name
+
+            mesh_group.bone_flags = nud_data.bone_flag
+
+            mesh_group.meshes = list()
+
+            # Get the armature's data
+            armature: Armature = obj.parent.data
+            mesh_bone = armature.bones.get(nud_data.mesh_bone)
+            obj_parent_type = obj.parent_type
+
             #bounding box and bounding sphere calculations
-            bbox_corners = [Vector(corner) for corner in obj.bound_box]
+            bbox_corners = [mesh_bone.matrix_local.inverted() @ Vector(corner) for corner in obj.bound_box]
 
             bbox_corners_world = [obj.matrix_world @ corner for corner in bbox_corners]
 
@@ -630,27 +648,8 @@ class XfbinExporter:
 
             chunk.bounding_box = list((min_corner * 100)) + list((max_corner * 100)) if nud_data.model_attributes & 0x04 else tuple()
 
-            # Create the nud
-            chunk.nud = Nud()
-            chunk.nud.name = chunk.name
-
-            # Set the nud's properties
             chunk.nud.bounding_sphere = pos_m_to_cm_tuple([*center, radius])
-
-            # Always treat nuds as having only 1 mesh group
-            chunk.nud.mesh_groups = [NudMeshGroup()]
-            mesh_group = chunk.nud.mesh_groups[0]
-            mesh_group.name = chunk.name
-
-            mesh_group.bone_flags = nud_data.bone_flag
             mesh_group.bounding_sphere = pos_m_to_cm_tuple([*center, radius]) + (0,0,0,0)
-
-            mesh_group.meshes = list()
-
-            # Get the armature's data
-            armature: Armature = obj.parent.data
-            mesh_bone = armature.bones.get(nud_data.mesh_bone)
-            obj_parent_type = obj.parent_type
 
             #set the current object as the active object
             context.view_layer.objects.active = obj
@@ -660,9 +659,8 @@ class XfbinExporter:
             mesh: Mesh = obj.evaluated_get(context.evaluated_depsgraph_get()).data
 
             # Transform the mesh by the inverse of its bone's matrix, if it was not parented to it
-            if mesh_bone and obj_parent_type != 'BONE':
-                #print(f"Transforming {mesh_obj.name} by the inverse of {mesh_bone.name}'s matrix")
-                mesh.transform(mesh_bone.matrix_local.to_4x4().inverted())
+            if mesh_bone:
+                mesh.transform(mesh_bone.matrix_local.inverted())
 
             #triangulate the mesh
             mesh.calc_loop_triangles()
@@ -824,7 +822,11 @@ class XfbinExporter:
                 # Only add the mesh if it doesn't exceed the vertex and face limits
                 mesh_group.meshes.append(mat_mesh)
 
+
             model_chunks.append(chunk)
+
+            #update the mesh object
+            obj.update_tag()
 
 
         return model_chunks
