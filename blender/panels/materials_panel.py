@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import (BoolProperty, CollectionProperty, FloatProperty,
+from bpy.props import (BoolProperty, CollectionProperty, FloatProperty, PointerProperty,
                        FloatVectorProperty, IntProperty, StringProperty, EnumProperty)
 from bpy.types import Object, Panel, PropertyGroup
 
@@ -17,28 +17,8 @@ class XFBIN_UL_MatTextures(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row(align=True)
-            row.prop(item, 'texture_name',emboss= False, text='', icon='IMAGE_DATA')
-            row.prop_search(item, 'texture_name', bpy.context.scene.xfbin_texture_chunks_data, 'texture_chunks', text='')
-
-            #row.prop(item, 'path', text='',emboss=False, icon='FILE_FOLDER')
-            #row.prop(item, 'reference', text='Reference', icon='FILE_TICK', toggle=True)
-
-
-class XFBIN_UL_SelectTexture(bpy.types.UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row(align=True)
-            row.prop(item, 'texture_name',emboss= False, text='', icon='IMAGE_DATA')
-            row.prop(item, 'path', text='',emboss=False, icon='FILE_FOLDER')
-            row.prop(item, 'reference', text='Reference', icon='FILE_TICK', toggle=True)
-
-
-        elif self.layout_type in {'GRID'}:
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon='MATERIAL_DATA')
-            layout.label(text="", icon='FILE_FOLDER')
-            layout.label(text="", icon='TEXTURE')
-            layout.label(text="", icon='LINKED')
+            row.prop(item, 'name',emboss= False, text='', icon='IMAGE_DATA')
+            row.prop_search(item, 'name', bpy.context.scene.xfbin_texture_chunks_data, 'texture_chunks', text='')
 
 
 class XFBIN_MatTexture_OT_Add(bpy.types.Operator):
@@ -48,7 +28,7 @@ class XFBIN_MatTexture_OT_Add(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
-        texture: MaterialNutTexturePropertyGroup = mat.NUTextures.add()
+        texture: XfbinMaterialTexturesPropertyGroup = mat.NUTextures.add()
         texture.texture_count = 1
         mat.NUT_index = len(mat.NUTextures) - 1
         return {'FINISHED'}
@@ -108,154 +88,28 @@ class XFBIN_MatTexture_OT_Duplicate(bpy.types.Operator):
         texture_index = mat.NUT_index
 
         if len(mat.NUTextures) > 0:
-            newTexture: MaterialNutTexturePropertyGroup = mat.NUTextures.add()
-            newTexture.texture_name = mat.NUTextures[texture_index].texture_name
+            newTexture: XfbinMaterialTexturesPropertyGroup = mat.NUTextures.add()
+            newTexture.name = mat.NUTextures[texture_index].name
 
         return {'FINISHED'}
 
 
-class NutSubTexturePropertyGroup(PropertyGroup):
-    def update_texture(self, context):
-        if self.texture:
-            self.width = str(self.texture.size[0])
-            self.height = str(self.texture.size[1])
-
-            def get_pixel_format(ddsf):
-                if ddsf.header.pixel_format.fourCC in dds.nut_pf_fourcc.keys():
-                    pf = dds.nut_pf_fourcc[ddsf.header.pixel_format.fourCC]
-                    return Pixel_Formats[pf]
-
-
-                elif ddsf.header.pixel_format.bitmasks in dds.nut_pf_bitmasks.keys():
-                    pf = dds.nut_pf_bitmasks[ddsf.header.pixel_format.bitmasks]
-                    return Pixel_Formats[pf]
-
-                else:
-                    return 'UNSUPPORTED'
-            
-            #read pixel format
-            if self.texture.packed_file:
-                ddsf = dds.read_dds(self.texture.packed_file.data)
-                self.pixel_format = get_pixel_format(ddsf)
-            else:
-                #try to read the file from the path
-                ddsf = dds.read_dds(open(self.texture.filepath, 'rb').read())
-                self.pixel_format = get_pixel_format(ddsf)
-        else:
-            self.width = ''
-            self.height = ''
-            self.pixel_format = ''
-
-
-    texture: bpy.props.PointerProperty(type=bpy.types.Image, update= update_texture)
-
-    width: StringProperty()
-
-    height: StringProperty()
-
-    pixel_format: StringProperty()
-
-
-class MaterialNutTexturePropertyGroup(PropertyGroup):
-    def update_texture_name(self, context):
-        self.update_name()
-    
-    def update_count(self, context):
-        if self.texture_count > len(self.textures):
-            for i in range(self.texture_count - len(self.textures)):
-                self.textures.add()
-        elif self.texture_count < len(self.textures):
-            for i in range(len(self.textures) - self.texture_count):
-                self.textures.remove(-1)
-
-    texture_name: StringProperty(
-        name='Texture Name',
-        default='new_texture',
-        update=update_texture_name,
-    )
-
-    path: StringProperty(
-        name='Chunk Path',
-        description='XFBIN chunk path that will be used for identifying the texture in the XFBIN.\n'
-        'Should be the same as the path of the texture in the XFBIN to inject to.\n'
-        'Example: "c/1nrt/tex/1nrtbody.nut"',
-    )
-
-    textures: CollectionProperty(
-        type=NutSubTexturePropertyGroup,
-    )
-
-    texture_index: IntProperty()
-
-    texture_count: IntProperty(min=0, update= update_count)
-
-    reference: BoolProperty(
-        name='Reference',
-        default=False,
-    )
-
-    def update_name(self):
-        self.name = self.texture_name
-
-    def init_data(self, chunk: NuccChunkTexture):
-        self.texture_name = chunk.name
-        self.path = chunk.filePath
-        if chunk.nut:
-            self.texture_count = chunk.nut.texture_count
-
-            self.textures.clear()
-            for i in range(chunk.nut.texture_count):
-                t: NutSubTexturePropertyGroup = self.textures.add()
-                t.texture = bpy.data.images.get(f"{chunk.name}_{i}")
-        else:
-            self.reference = True
-
-'''
-class TextureGroupPropertyGroup(PropertyGroup):
-    def update_flag(self, context):
-        self.update_name()
-
-    flag: IntProperty(
-        name='Flag',
-        min=-0x80_00_00_00,
-        max=0x7F_FF_FF_FF,
-        update=update_flag,
-    )
-
-    textures: CollectionProperty(
-        type=MaterialNutTexturePropertyGroup,
-    )
-
-    texture_index: IntProperty()
-
-    test: StringProperty()
-
-    def update_name(self):
-        self.name = str(self.flag)
-
-    def init_data(self, group: MaterialTextureGroup):
-        self.flag = group.unk
-
-        self.textures.clear()
-        for chunk in group.texture_chunks:
-            t: MaterialNutTexturePropertyGroup = self.textures.add()
-            t.init_data(chunk)
-'''
-
-
 class XfbinMaterialTexturesPropertyGroup(PropertyGroup):
-    def update_texture(self, context):
-        self.texture_name = self.texture.name
-    
-    texture: bpy.props.PointerProperty(type=XfbinTextureChunkPropertyGroup)
-    texture_name: StringProperty()
+    def update_name(self, context):
+        self.name = self.texture.name
 
-    magFilter: EnumProperty(default='1', items=(
+
+    name: StringProperty(default='new_texture')
+    texture: bpy.props.PointerProperty(
+        type=XfbinTextureChunkPropertyGroup,
+        update=update_name)
+
+    magFilter: EnumProperty(default='2', items=(
                             ('1', 'Nearest', ''),
                             ('2', 'Linear', ''),
                             ))
     
-    minFilter: EnumProperty(default='1', items=(
+    minFilter: EnumProperty(default='2', items=(
                             ('1', 'Nearest', ''),
                             ('2', 'Linear', ''),
                             ('3', 'Nearest Mipmap Nearest', ''),
@@ -263,7 +117,7 @@ class XfbinMaterialTexturesPropertyGroup(PropertyGroup):
                             ('5', 'Nearest Mipmap Linear', ''),
                             ('6', 'Linear Mipmap Linear', ''),
                             ))
-    mapMode: IntProperty(default=0)
+    mapMode: IntProperty(default=6)
     mipDetail: IntProperty()
     wrapModeS: EnumProperty(default='1', items=(
                             ('1', 'Repeat', ''),
@@ -283,13 +137,16 @@ class XfbinMaterialTexturesPropertyGroup(PropertyGroup):
                             ('6', 'Extend & Mirror', '')
                         ))
     
-    unk0: IntProperty(default=0)
+    baseID: IntProperty(default=0)
+    groupID: IntProperty(default=0)
+    subGroupID: IntProperty(default=0)
+    textureID: IntProperty(default=0)
     unk1: IntProperty(default=0)
-    unk2: IntProperty(default=7783)
+    LOD: IntProperty(default=7783)
 
 
     def init_data(self, chunk):
-        self.texture_name = chunk.name
+        self.name = chunk.name
     
 
     def init_tex_props(self, tex):
@@ -300,9 +157,12 @@ class XfbinMaterialTexturesPropertyGroup(PropertyGroup):
         self.wrapModeS = str(tex.wrapModeS)
         self.wrapModeT = str(tex.wrapModeT)
 
-        self.unk0 = tex.unk0
+        self.baseID = tex.baseID
+        self.groupID = tex.groupID
+        self.subGroupID = tex.subGroupID
+        self.textureID = tex.textureID
         self.unk1 = tex.unk1
-        self.unk2 = tex.unk2
+        self.LOD = tex.LOD
 
 
 class XFBIN_UL_MatShaders(bpy.types.UIList):
@@ -380,6 +240,42 @@ class XFBIN_MatShader_OT_Duplicate(bpy.types.Operator):
         if len(mat.NUD_Shaders) > 0:
             newShader: NUD_ShaderPropertyGroup = mat.NUD_Shaders.add()
             newShader.init_copy(mat.NUD_Shaders[shader_index])
+
+        return {'FINISHED'}
+
+
+class XFBIN_MatShader_OT_Copy(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.shader_copy'
+    bl_label = 'Copy Shader'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        clipboard: XfbinMatClipboardPropertyGroup = bpy.context.scene.xfbin_material_clipboard
+        shader_index = mat.NUD_Shader_index
+
+        if len(mat.NUD_Shaders) > 0:
+            clipboard.shader_clipboard.init_copy(mat.NUD_Shaders[shader_index])
+
+            self.report({'INFO'}, f'Shader ({mat.NUD_Shaders[shader_index].name}) from ({obj.active_material.name}) to clipboard')
+        return {'FINISHED'}
+
+
+class XFBIN_MatShader_OT_Paste(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.shader_paste'
+    bl_label = 'Paste Shader'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        clipboard: XfbinMatClipboardPropertyGroup = bpy.context.scene.xfbin_material_clipboard
+
+        if len(mat.NUD_Shaders) > 0:
+            newShader: NUD_ShaderPropertyGroup = mat.NUD_Shaders.add()
+            newShader.init_copy(clipboard.shader_clipboard)
+
+            self.report({'INFO'}, f'Shader ({clipboard.shader_clipboard.name}) from clipboard to ({obj.active_material.name})')
+        
 
         return {'FINISHED'}
 
@@ -481,8 +377,53 @@ class XFBIN_MatParam_OT_Duplicate(bpy.types.Operator):
             newParam.init_copy(shader.shader_params[param_index])
 
         return {'FINISHED'}
-    
 
+
+class XFBIN_MatParam_OT_Copy(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.param_copy'
+    bl_label = 'Copy Param'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        shader_index = mat.NUD_Shader_index
+        if shader_index < 0:
+            return {'CANCELLED'}
+        
+        shader: NUD_ShaderPropertyGroup = mat.NUD_Shaders[shader_index]
+        param_index = shader.NUD_ShaderParam_index
+
+        if len(shader.shader_params) > 0:
+            clipboard: XfbinMatClipboardPropertyGroup = bpy.context.scene.xfbin_material_clipboard
+            clipboard.param_clipboard.init_copy(shader.shader_params[param_index])
+
+            self.report({'INFO'}, f'Param ({shader.shader_params[param_index].name}) from ({obj.active_material.name}) to clipboard')
+        return {'FINISHED'}
+
+
+class XFBIN_MatParam_OT_Paste(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.param_paste'
+    bl_label = 'Paste Param'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        shader_index = mat.NUD_Shader_index
+        if shader_index < 0:
+            return {'CANCELLED'}
+        
+        shader: NUD_ShaderPropertyGroup = mat.NUD_Shaders[shader_index]
+        clipboard: XfbinMatClipboardPropertyGroup = bpy.context.scene.xfbin_material_clipboard
+
+        if len(shader.shader_params) > 0:
+            newParam: NUD_ShaderParamPropertyGroup = shader.shader_params.add()
+            newParam.init_copy(clipboard.param_clipboard)
+
+            self.report({'INFO'}, f'Param ({clipboard.param_clipboard.name}) from clipboard to ({obj.active_material.name})')
+        
+
+        return {'FINISHED'}
+    
 
 
 class NUD_ShaderParamPropertyGroup(PropertyGroup):
@@ -528,9 +469,13 @@ class NUD_ShaderTexPropertyGroup(PropertyGroup):
     mipDetail: IntProperty()
     wrapModeS: IntProperty()
     wrapModeT: IntProperty()
-    unk0: IntProperty()
+    baseID: IntProperty()
+    groupID: IntProperty()
+    subGroupID: IntProperty()
+    textureID: IntProperty()
+
     unk1: IntProperty()
-    unk2: IntProperty()
+    LOD: IntProperty()
 
 
     def init_data(self, tex):
@@ -540,9 +485,12 @@ class NUD_ShaderTexPropertyGroup(PropertyGroup):
         self.mipDetail = tex.mipDetail
         self.wrapModeS = tex.wrapModeS
         self.wrapModeT = tex.wrapModeT
-        self.unk0 = tex.unk0
+        self.baseID = tex.baseID
+        self.groupID = tex.groupID
+        self.subGroupID = tex.subGroupID
+        self.textureID = tex.textureID
         self.unk1 = tex.unk1
-        self.unk2 = tex.unk2
+        self.LOD = tex.LOD
 
 
 class NUD_ShaderPropertyGroup(PropertyGroup):
@@ -577,6 +525,10 @@ class NUD_ShaderPropertyGroup(PropertyGroup):
         type=NUD_ShaderTexPropertyGroup,
     )
 
+    is_initialized: BoolProperty(
+        default = False
+    )
+
 
     def init_data(self, shader):
         self.name = str(hex(shader.flags))
@@ -599,6 +551,8 @@ class NUD_ShaderPropertyGroup(PropertyGroup):
         for tex in shader.textures:
             t = self.shader_tex_props.add()
             t.init_data(tex)
+        
+        self.is_initialized = True
     
     def init_copy(self, shader):
         self.name = shader.name
@@ -630,11 +584,12 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
     alpha: FloatProperty(
         name='Alpha',
         min=0,
-        max=255,
+        max=1,
+        subtype = "FACTOR"
     )
-    glare: FloatProperty(name='Glare', min=0, max=255)
+    glare: FloatProperty(name='Glare', min=0, max=1, subtype= "FACTOR")
 
-    UV0: BoolProperty(name='Use UV0')
+    UV0: BoolProperty(name='Use UV0', default=True)
     UV1: BoolProperty(name='Use UV1')
     UV2: BoolProperty(name='Use UV2')
     UV3: BoolProperty(name='Use UV3')
@@ -642,16 +597,16 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
     useFallOff: BoolProperty(name='Use fallOff')
     useOutlineID: BoolProperty(name='Use outlineID')
 
-    uvOffset0: FloatVectorProperty(name='uvOffset0', size=4)
-    uvOffset1: FloatVectorProperty(name='uvOffset1', size=4)
-    uvOffset2: FloatVectorProperty(name='uvOffset2', size=4)
-    uvOffset3: FloatVectorProperty(name='uvOffset3', size=4)
+    uvOffset0: FloatVectorProperty(name='uvOffset0', size=4, default=(0.0, 0.0, 1.0, 1.0))
+    uvOffset1: FloatVectorProperty(name='uvOffset1', size=4, default=(0.0, 0.0, 1.0, 1.0))
+    uvOffset2: FloatVectorProperty(name='uvOffset2', size=4, default=(0.0, 0.0, 1.0, 1.0))
+    uvOffset3: FloatVectorProperty(name='uvOffset3', size=4, default=(0.0, 0.0, 1.0, 1.0))
     blendRate: FloatProperty(name='Blend Rate')
     blendType: FloatProperty(name='Blend Type')
     fallOff: FloatProperty(name='fallOff')
-    outlineID: FloatProperty(name='outlineID')
+    outlineID: FloatProperty(name='outlineID', default=1)
 
-    texGroupsCount: IntProperty(name='Texture Groups Count', min=0, max=4)
+    texGroupsCount: IntProperty(name='Texture Groups Count', min=0, max=4, default=1)
 
     '''texture_groups: CollectionProperty(
         type=TextureGroupPropertyGroup,
@@ -671,6 +626,28 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
         type=NUD_ShaderPropertyGroup,
         name='NUD Shaders',
     )
+
+    mainShader: PointerProperty(
+        type= NUD_ShaderPropertyGroup,
+        name = "Main Shader"
+    )
+
+    outlineShader: PointerProperty(
+        type= NUD_ShaderPropertyGroup,
+        name = "Outline Shader"
+    )
+
+    blurShader: PointerProperty(
+        type= NUD_ShaderPropertyGroup,
+        name = "Blur Shader"
+    )
+
+    shadowShader: PointerProperty(
+        type= NUD_ShaderPropertyGroup,
+        name = "Shadow Shader"
+    )
+
+    use_object_props: BoolProperty(default=True)
 
     NUD_Shader_index: IntProperty()
 
@@ -701,11 +678,11 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
         self.outlineID = 0.0
 
 
-    def init_data(self, material: NuccChunkMaterial, mesh):
+    def init_data(self, material: NuccChunkMaterial, mesh, mesh_flags):
         self.material_name = material.name
         print(f"material name: {material.name}")
 
-        self.alpha = material.alpha * 0.003921569
+        self.alpha = material.alpha / 255
         self.glare = material.glare
 
         self.flags = material.flags
@@ -739,12 +716,55 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
             g.init_data(group)'''
         
         self.texGroupsCount = len(material.texture_groups)
+
+        s_type_index = -1
         
-        mesh_shaders = mesh.materials
+        if mesh_flags[0] & 0x2 or mesh_flags[0] & 1 and not mesh_flags[1] & 16:
+            s_type_index += 1
+            main_shader = mesh.materials[s_type_index]
+
+            if self.mainShader.is_initialized:
+                self.mainShader.init_data(main_shader)
+            else:
+                self.mainShader.init_data(main_shader)
+                s = self.NUD_Shaders.add()
+                s.init_data(main_shader)
+
+        if mesh_flags[0] & 0x4:
+            s_type_index += 1
+            outline_shader = mesh.materials[s_type_index]
+
+            if self.outlineShader.is_initialized:
+                self.outlineShader.init_data(outline_shader)
+            else:
+                self.outlineShader.init_data(outline_shader)
+                s = self.NUD_Shaders.add()
+                s.init_data(outline_shader)
+
+        if mesh_flags[0] & 0x10:
+            s_type_index += 1
+            blur_shader = mesh.materials[s_type_index]
+
+            if self.blurShader.is_initialized:
+                self.blurShader.init_data(blur_shader)
+            else:
+                self.blurShader.init_data(blur_shader)
+                s = self.NUD_Shaders.add()
+                s.init_data(blur_shader)
+        
+        if mesh_flags[0] & 0x20:
+            s_type_index += 1
+            shadow_shader = mesh.materials[s_type_index]
+
+            if self.shadowShader.is_initialized:
+                self.shadowShader.init_data(shadow_shader)
+            else:
+                self.shadowShader.init_data(shadow_shader)
+                s = self.NUD_Shaders.add()
+                s.init_data(shadow_shader)
+        
+        '''mesh_shaders = mesh.materials
         for shader in mesh_shaders:
-            if len(self.NUD_Shaders) >= 4:
-                break
-            
             if str(hex(shader.flags)) in self.NUD_Shaders.keys():
                 print('shader already exists')
                 s = self.NUD_Shaders[str(hex(shader.flags))]
@@ -752,24 +772,67 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
             else:
                 s = self.NUD_Shaders.add()
                 s.init_data(shader)
+            
+            print(f"added shader {hex(shader.flags)}")'''
         
+        print(f"shader count {len(self.NUD_Shaders)}")
         self.NUTextures.clear()
-        tex_group = material.texture_groups[0]
-        for i, chunk in enumerate(tex_group.texture_chunks):
-            if bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(chunk.name):
-                texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks[chunk.name]
+        
+        #for tg_index, tex_group in enumerate(material.texture_groups):
+        for tex_index, tex_chunk in enumerate(material.texture_groups[0].texture_chunks):
+            if bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(tex_chunk.name):
+                texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks[tex_chunk.name]
             else:
                 #create a new texture chunk
                 texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.add()
-                texture.init_data(chunk)
+                texture.init_data(tex_chunk)
             
             nut = self.NUTextures.add()
             nut.init_data(texture)
             
             #get the texture props from the first nud shader
             nud_shader = self.NUD_Shaders[0]
-            tex = nud_shader.shader_tex_props[i]
-            nut.init_tex_props(tex)
+            props = nud_shader.shader_tex_props[tex_index]
+            nut.init_tex_props(props)      
+    
+
+    def init_copy(self, matprop):
+        self.alpha = matprop.alpha
+        self.glare = matprop.glare
+        
+        self.UV0 = matprop.UV0
+        self.uvOffset0 = matprop.uvOffset0
+        self.UV1 = matprop.UV1
+        self.uvOffset1 = matprop.uvOffset1
+        self.UV2 = matprop.UV2
+        self.uvOffset2 = matprop.uvOffset2
+        self.UV3 = matprop.UV3
+        self.uvOffset3 = matprop.uvOffset3
+        self.Blend = matprop.Blend
+        self.blendRate = matprop.blendRate
+        self.blendType = matprop.blendType
+        self.useFallOff = matprop.useFallOff
+        self.fallOff = matprop.fallOff
+        self.useOutlineID = matprop.useOutlineID
+        self.outlineID = matprop.outlineID
+
+        '''self.texture_groups.clear()
+        for group in matprop.texture_groups:
+            g = self.texture_groups.add()
+            g.init_data(group)'''
+        
+        self.texGroupsCount = matprop.texGroupsCount
+
+        self.NUD_Shaders.clear()
+        for shader in matprop.NUD_Shaders:
+            s = self.NUD_Shaders.add()
+            s.init_copy(shader)
+        
+        self.NUTextures.clear()
+        for texture in matprop.NUTextures:
+            t = self.NUTextures.add()
+            t.init_data(texture)
+            t.init_tex_props(texture)
 
 
 
@@ -788,6 +851,11 @@ class XfbinMaterialPropertyPanel(Panel):
     def draw(self, context):
         layout = self.layout
         obj = context.object
+
+        #copy paste ops
+        row = layout.row()
+        row.operator('xfbin_mat.copy', icon='COPYDOWN', text='Copy')
+        row.operator('xfbin_mat.paste', icon='PASTEDOWN', text='Paste')
 
         if obj.active_material and obj.active_material.xfbin_material_data:
             material: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
@@ -866,6 +934,8 @@ class NUD_ShaderPropertyPanel(Panel):
 
         row.label(text='Shaders:')
         row.label(text='Shader Params:')
+        row = col.row()
+        row.prop(mat, "use_object_props", text="Per Object Shader Properties (Main Shader Only)")
 
         row = col.row()
 
@@ -874,11 +944,13 @@ class NUD_ShaderPropertyPanel(Panel):
         row.template_list(
             "XFBIN_UL_MatShaders", "", mat, "NUD_Shaders", mat, "NUD_Shader_index",
             rows=4, maxrows=10, type='DEFAULT'
-        )   
+        )
+
         col = row.column(align=True)
         col.operator("xfbin_mat.shader_add", icon='ADD', text="")
         col.operator("xfbin_mat.shader_remove", icon='REMOVE', text="")
-        col.operator("xfbin_mat.shader_duplicate", icon='DUPLICATE', text="")
+        col.operator("xfbin_mat.shader_copy", icon='COPYDOWN', text="")
+        col.operator("xfbin_mat.shader_paste", icon='PASTEDOWN', text="")
         col.operator("xfbin_mat.shader_move", icon='TRIA_UP', text="").direction = 'UP'
         col.operator("xfbin_mat.shader_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
 
@@ -893,10 +965,11 @@ class NUD_ShaderPropertyPanel(Panel):
                 "XFBIN_UL_MatParams", "", shader, "shader_params", shader, "NUD_ShaderParam_index",
                 rows=4, maxrows=10, type='DEFAULT'
             )
-            col = row.column(align=False)
+            col = row.column(align=True)
             col.operator("xfbin_mat.param_add", icon='ADD', text="")
             col.operator("xfbin_mat.param_remove", icon='REMOVE', text="")
-            col.operator("xfbin_mat.param_duplicate", icon='DUPLICATE', text="")
+            col.operator("xfbin_mat.param_copy", icon='COPYDOWN', text="")
+            col.operator("xfbin_mat.param_paste", icon='PASTEDOWN', text="")
             col.operator("xfbin_mat.param_move", icon='TRIA_UP', text="").direction = 'UP'
             col.operator("xfbin_mat.param_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
 
@@ -911,9 +984,38 @@ class NUD_ShaderPropertyPanel(Panel):
                     row = box.row()
                     matrix_prop_group(row, param, 'values', param.count, "Values")
 
+            '''row = layout.row()
+            col1 = row.column(align=True)
+            col1.prop(mat.mainShader, 'name', text='Main')
+            col1row = col1.row()
+            col1row.template_list(
+                "XFBIN_UL_MatParams", "", mat.mainShader, "shader_params", mat.mainShader, "NUD_ShaderParam_index",
+            )
+            col1col = col1.column(align=True)
+
+
+            col2 = row.column(align=True)
+            col2.prop(mat.outlineShader, 'name', text='Outline')
+            col2row = col2.row()
+            col2row.template_list(
+                "XFBIN_UL_MatParams", "", mat.outlineShader, "shader_params", mat.outlineShader, "NUD_ShaderParam_index",
+            )
+
+            col3 = row.column(align=True)
+            col3.prop(mat.blurShader, 'name', text='Blur')
+            col3row = col3.row()
+            col3row.template_list(
+                "XFBIN_UL_MatParams", "", mat.blurShader, "shader_params", mat.blurShader, "NUD_ShaderParam_index",
+            )
+
+            col4 = row.column(align=True)
+            col4.prop(mat.shadowShader, 'name', text='Shadow')
+            col4row = col4.row()
+            col4row.template_list(
+                "XFBIN_UL_MatParams", "", mat.shadowShader, "shader_params", mat.shadowShader, "NUD_ShaderParam_index",
+            )'''
+
             box = layout.box()
-            row = box.row()
-            row.prop(shader, 'name')
             row = box.row()
             row.prop(shader, 'source_factor')
             row.prop(shader, 'destination_factor')
@@ -970,8 +1072,8 @@ class NutTexturePropertyPanel(Panel):
         texture_index = mat.NUT_index
         
         if mat.NUTextures and texture_index >= 0:
-            texture_n: MaterialNutTexturePropertyGroup = mat.NUTextures[texture_index]
-            texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(texture_n.texture_name)
+            texture_n: XfbinMaterialTexturesPropertyGroup = mat.NUTextures[texture_index]
+            texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(texture_n.name)
             if texture:
                 box = layout.box()
                 box.prop(texture, 'texture_count', text='Texture Count')
@@ -997,42 +1099,13 @@ class NutTexturePropertyPanel(Panel):
             row.prop(texture_n, 'wrapModeS')
             row.prop(texture_n, 'wrapModeT')
             row = box.row()
-            row.prop(texture_n, 'unk0')
+            row.prop(texture_n, 'baseID')
+            row.prop(texture_n, 'groupID')
+            row.prop(texture_n, 'subGroupID')
+            row.prop(texture_n, 'textureID')
             row.prop(texture_n, 'unk1')
-            row.prop(texture_n, 'unk2')
+            row.prop(texture_n, 'LOD')
 
-
-'''
-class TextureGroupPropertyPanel(Panel):
-    bl_idname = 'MATERIAL_PT_NUT_texture_group'
-    bl_parent_id = 'MATERIAL_PT_XFBIN_material'
-    bl_label = 'Texture Groups'
-
-    bl_space_type = 'PROPERTIES'
-    bl_context = 'object'
-    bl_region_type = 'WINDOW'
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        obj = context.object
-        return obj.active_material.xfbin_material_data
-
-    def draw(self, context):
-        layout = self.layout
-        obj = context.object
-        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
-
-        draw_xfbin_list(layout, 0, mat, f'{mat}', 'texture_groups', 'texture_group_index')
-
-        texture_group_index = mat.texture_group_index
-
-        if mat.texture_groups and texture_group_index >= 0:
-            group: TextureGroupPropertyGroup = mat.texture_groups[texture_group_index]
-            box = layout.box()
-
-            box.prop(group, 'flag')
-'''
 
 class XFBIN_MatTexture_Open(bpy.types.Operator):
     """Open an image to include in the NUT"""
@@ -1051,8 +1124,8 @@ class XFBIN_MatTexture_Open(bpy.types.Operator):
             return {'CANCELLED'}
         
         mat_textures = mat.NUTextures
-        mat_texture: MaterialNutTexturePropertyGroup = mat_textures[mat_texture_index]
-        nut_texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(mat_texture.texture_name)
+        mat_texture: XfbinMaterialTexturesPropertyGroup = mat_textures[mat_texture_index]
+        nut_texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(mat_texture.name)
         if not nut_texture:
             return {'CANCELLED'}
         
@@ -1080,13 +1153,12 @@ class XFBIN_MatTexture_Open(bpy.types.Operator):
         image.alpha_mode = 'STRAIGHT'
         image.name = self.filepath.split('\\')[-1][:-4]
         image.pack()
-        #image.pack(data=texdata, data_len=len(texdata))
         image.source = 'FILE'
         #add custom properties to the image
         image['nut_pixel_format'] = str(texdata.header.pixel_format)
         image['nut_mipmaps_count'] = str(texdata.header.mipMapCount)
 
-        texture.textures = image
+        texture.image = image
         texture.name = image.name
         texture.width = str(texdata.header.width)
         texture.height = str(texdata.header.height)
@@ -1099,15 +1171,85 @@ class XFBIN_MatTexture_Open(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
 
+class XFBIN_Material_OT_Copy(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.copy'
+    bl_label = 'Copy Material'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        clipboard = bpy.context.scene.xfbin_material_clipboard
+        
+        clipboard.init_copy_material(mat)
+
+        self.report({'INFO'}, f"XFBIN Material ({obj.active_material.name}) copied to clipboard")
+
+        return {'FINISHED'}
+        
+
+
+
+class XFBIN_Material_OT_Paste(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.paste'
+    bl_label = 'Paste Material'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        clipboard = bpy.context.scene.xfbin_material_clipboard
+        
+        mat.init_copy(clipboard.material_clipboard)
+
+        self.report({'INFO'}, f"XFBIN Material ({obj.active_material.name}) pasted from clipboard")
+
+        return {'FINISHED'}
+
+
+class XfbinMatClipboardPropertyGroup(PropertyGroup):
+    
+    material_clipboard: PointerProperty(
+        type=XfbinMaterialPropertyGroup,
+        name='Material Clipboard'
+    )
+
+    shader_clipboard: PointerProperty(
+        type=NUD_ShaderPropertyGroup,
+        name='Shader Clipboard'
+    )
+
+    shader_param_clipboard: PointerProperty(
+        type=NUD_ShaderParamPropertyGroup,
+        name='Shader Param Clipboard'
+    )
+
+    texture_clipboard: PointerProperty(
+        type=XfbinMaterialTexturesPropertyGroup,
+        name='Texture Clipboard'
+    )
+
+    def init_copy_material(self, matprop):
+        self.material_clipboard.init_copy(matprop)
+    
+    def init_copy_shader(self, shader):
+        self.shader_clipboard.init_copy(shader)
+    
+    def init_copy_shader_param(self, param):
+        self.shader_param_clipboard.init_copy(param)
+    
+    def init_copy_texture(self, texture):
+        self.texture_clipboard.init_copy(texture)
+
+
 material_property_groups = (
-    NutSubTexturePropertyGroup,
-    MaterialNutTexturePropertyGroup,
+    #NutSubTexturePropertyGroup,
+    #MaterialNutTexturePropertyGroup,
     XfbinMaterialTexturesPropertyGroup,
     NUD_ShaderParamPropertyGroup,
     NUD_ShaderTexPropertyGroup,
     NUD_ShaderPropertyGroup,
     #TextureGroupPropertyGroup,
-    XfbinMaterialPropertyGroup,    
+    XfbinMaterialPropertyGroup,
+    XfbinMatClipboardPropertyGroup
 )
 
 material_classes = (
@@ -1115,6 +1257,8 @@ material_classes = (
     XFBIN_UL_MatTextures,
     XFBIN_UL_MatShaders,
     XFBIN_UL_MatParams,
+    XFBIN_Material_OT_Copy,
+    XFBIN_Material_OT_Paste,
     XFBIN_MatTexture_OT_Add,
     XFBIN_MatTexture_OT_Remove,
     XFBIN_MatTexture_OT_Move,
@@ -1124,10 +1268,14 @@ material_classes = (
     XFBIN_MatShader_OT_Remove,
     XFBIN_MatShader_OT_Move,
     XFBIN_MatShader_OT_Duplicate,
+    XFBIN_MatShader_OT_Copy,
+    XFBIN_MatShader_OT_Paste,
     XFBIN_MatParam_OT_Add,
     XFBIN_MatParam_OT_Remove,
     XFBIN_MatParam_OT_Move,
     XFBIN_MatParam_OT_Duplicate,
+    XFBIN_MatParam_OT_Copy,
+    XFBIN_MatParam_OT_Paste,
     XfbinMaterialPropertyPanel,
     #TextureGroupPropertyPanel,
     NutTexturePropertyPanel,

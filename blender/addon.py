@@ -13,7 +13,7 @@ from .panels.anm_chunks_panel import (AnmChunksListPropertyGroup,
 from .panels.clump_panel import (ClumpPropertyGroup, clump_classes,
                                  clump_property_groups)
 from .panels.materials_panel import (XfbinMaterialPropertyGroup,
-                                     #GlobalNutPropertyGroup,
+                                     XfbinMatClipboardPropertyGroup,
                                         material_classes,
                                         material_property_groups)
 from .panels.common import EmptyPropertyGroup, clear_clipboard, common_classes
@@ -110,6 +110,10 @@ def register():
 
     bpy.app.handlers.load_post.append(clear_clipboard)
 
+    #create pointer properties to be used as a clipboard
+    bpy.types.Scene.xfbin_clipboard = PointerProperty(type=XfbinPointersGroup)
+    bpy.types.Scene.xfbin_material_clipboard = PointerProperty(type=XfbinMatClipboardPropertyGroup)
+
 
 def unregister():
     global XfbinPointersGroup
@@ -124,6 +128,8 @@ def unregister():
     del bpy.types.Object.xfbin_modelhit_data
     del bpy.types.Object.xfbin_modelhit_mesh_data
     del bpy.types.Object.xfbin_pointers
+    del bpy.types.Scene.xfbin_clipboard
+    del bpy.types.Scene.xfbin_material_clipboard
 
     bpy.utils.unregister_class(XfbinPointersGroup)
 

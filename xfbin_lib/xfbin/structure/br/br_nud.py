@@ -509,10 +509,13 @@ class BrNudMaterialTexture(BrStruct):
     def __br_read__(self, br: BinaryReader) -> None:
         # This is not the hash, because that does not exist in CC2 NUDs.
         # Apparently, 0 makes it completely ignore the NUT texture, while -1 makes it use it
-        self.unk0 = br.read_int32()
-        br.read_uint32()
+        self.baseID = br.read_uint8()
+        self.groupID = br.read_uint8()
+        self.subGroupID = br.read_uint8()
+        self.textureID = br.read_uint8()
+        unk0 = br.read_uint32()
 
-        br.read_uint16()
+        unk1 = br.read_uint16()
         self.mapMode = br.read_uint16()
 
         self.wrapModeS = br.read_uint8()
@@ -522,11 +525,14 @@ class BrNudMaterialTexture(BrStruct):
         self.mipDetail = br.read_uint8()
         self.unk1 = br.read_uint8()
 
-        br.read_uint32()
-        self.unk2 = br.read_uint16()
+        unk2 = br.read_uint32()
+        self.LOD = br.read_uint16()
 
     def __br_write__(self, br: 'BinaryReader', texture: 'NudMaterialTexture') -> None:
-        br.write_int32(texture.unk0)
+        br.write_int8(texture.baseID)
+        br.write_int8(texture.groupID)
+        br.write_int8(texture.subGroupID)
+        br.write_int8(texture.textureID)
         br.write_uint32(0)
 
         br.write_uint16(0)
@@ -540,7 +546,7 @@ class BrNudMaterialTexture(BrStruct):
         br.write_uint8(texture.unk1)
 
         br.write_uint32(0)
-        br.write_uint16(texture.unk2)
+        br.write_uint16(texture.LOD)
 
 
 class BrNudMaterialProperty(BrStruct):

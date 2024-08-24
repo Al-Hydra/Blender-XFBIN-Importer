@@ -440,9 +440,8 @@ class BrNuccChunkMaterial(BrNuccChunk):
 
         self.groupCount = br.read_uint16()
 
-        # 0xFE in Storm 1, 0xCD in JoJo and Storm 4. Should actually find out what it does
-        self.alpha = br.read_uint16()
-
+        self.alpha = br.read_uint8()
+        br.read_uint8()
         self.glare = br.read_float()
 
         self.flags = br.read_uint32()
@@ -470,7 +469,8 @@ class BrNuccChunkMaterial(BrNuccChunk):
     def __br_write__(self, br: 'BinaryReader', chunkIndexDict: IterativeDict):
         br.write_uint16(len(self.nuccChunk.texture_groups))
 
-        br.write_uint16(self.nuccChunk.alpha)
+        br.write_uint8(self.nuccChunk.alpha)
+        br.write_uint8(0)
 
         br.write_float(self.nuccChunk.glare)
 

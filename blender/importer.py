@@ -497,7 +497,7 @@ class XfbinImporter:
                     mat_chunk = nucc_model.material_chunks[mat_index]
 
                     #add the material to the mesh
-                    blender_mesh.materials.append(self.make_material(mat_chunk, mesh))
+                    blender_mesh.materials.append(self.make_material(mat_chunk, mesh, [nucc_model.rigging_flag, group.bone_flags]))
 
                     uv_count = len(mesh.vertices[0].uv)
 
@@ -774,12 +774,12 @@ class XfbinImporter:
             self.image['nut_pixel_format'] = self.pixel_format  
             self.image['nut_mipmaps_count'] = self.mipmap_count   '''
 
-    def make_material(self, xfbin_mat: NuccChunkMaterial, mesh) -> Material:
+    def make_material(self, xfbin_mat: NuccChunkMaterial, mesh, mesh_flags) -> Material:
         material_name = xfbin_mat.name
         if not bpy.data.materials.get(material_name):
             
             material = bpy.data.materials.new(material_name)
-            material.xfbin_material_data.init_data(xfbin_mat, mesh)
+            material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
 
             meshmat = mesh.materials[0]
             
@@ -799,7 +799,7 @@ class XfbinImporter:
             
         else:
             material = bpy.data.materials.get(material_name)
-            material.xfbin_material_data.init_data(xfbin_mat, mesh)
+            material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
 
         return material
 

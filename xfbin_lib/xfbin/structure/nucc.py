@@ -439,9 +439,6 @@ class RiggingFlag(IntFlag):
     SKINNED = 0x02  # JoJo eyes
     OUTLINE = 0x04
 
-    TEETH = 0x05  # Storm teeth
-    FULL = 0x06  # Body and tongue
-
     # Storm 4 and JoJo use these two combined for most models (in addition to the previous flags)
     BLUR = 0x10
     SHADOW = 0x20
