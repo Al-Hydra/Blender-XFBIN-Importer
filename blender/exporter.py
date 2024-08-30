@@ -171,8 +171,8 @@ class ExportXfbin(Operator, ExportHelper):
         layout.prop_search(self, 'collection', bpy.data, 'collections')
 
         if self.collection:
-            inject_row = layout.row()
-            inject_row.prop(self, 'inject_to_xfbin')
+            #inject_row = layout.row()
+            #inject_row.prop(self, 'inject_to_xfbin')
 
             layout.prop(self, 'export_textures')
             layout.prop(self, 'export_clumps')
@@ -309,14 +309,15 @@ class XfbinExporter:
         # Export clumps
         if self.export_clumps:
             for armature_obj in [obj for obj in self.collection.objects if obj.type == 'ARMATURE']:
+            
                 # Create a NuccChunkClump from the armature
                 clump = self.make_clump(armature_obj, context)
 
-                #get the dynamics object
-                dynamics_obj = self.collection.objects.get(f'{XFBIN_DYNAMICS_OBJ} [{armature_obj.name}]')
-                if dynamics_obj:
-                    dynamics = self.make_dynamics(dynamics_obj, context, clump)
-                    self.xfbin.add_chunk_page(dynamics)
+                #create dytamics chunk
+                if self.export_dynamics:
+                    dynamics_chunk = self.make_dynamics(armature_obj, clump, context)
+                    self.xfbin.add_chunk_page(dynamics_chunk)
+
                 
                 if not self.inject_to_clump:
                     self.xfbin.add_clump_page(clump)
@@ -418,7 +419,12 @@ class XfbinExporter:
             model_chunks = {m.name: m for m in self.make_models(meshes, clump, old_clump, context)}
 
             # Set the model chunks and model groups based on the clump data
-            clump.model_chunks = [model_chunks[c.value] for c in clump_data.models if c.value in model_chunks]
+            #clump.model_chunks = [model_chunks[c.value] for c in clump_data.models if c.value in model_chunks]
+            lod_list = ["lod1", "lod2", "LOD1", "LOD2"]
+            if clump.coord_flag0 > 1:
+                clump.model_chunks = [model_chunks[c.value] for c in clump_data.models if c.value in model_chunks and not any(lod in c.value for lod in lod_list)]
+            else:
+                clump.model_chunks = [model_chunks[c.value] for c in clump_data.models if c.value in model_chunks]
 
             # Add a None reference for model groups that might use it
             # Hopefully no actual models have that name...
@@ -432,7 +438,7 @@ class XfbinExporter:
 
                 g.flag0 = group.flag0
                 g.flag1 = group.flag1
-                g.unk = hex_str_to_int(group.unk)
+                g.unk = group.unk
                 g.model_chunks = [model_chunks[c.value] for c in group.models if c.value in model_chunks]
 
                 clump.model_groups.append(g)
@@ -896,6 +902,20 @@ class XfbinExporter:
             shader.unk1 = shader_settings.unk1
             shader.unk2 = shader_settings.unk2
             shader.zBufferOffset = shader_settings.zbuffer_offset
+        
+        def set_texture_props(texture, tex_props):
+            texture.baseID = tex_props.baseID
+            texture.groupID = tex_props.groupID
+            texture.subGroupID = tex_props.subGroupID
+            texture.textureID = tex_props.textureID
+            texture.mapMode = tex_props.mapMode
+            texture.wrapModeS = int(tex_props.wrapModeS)
+            texture.wrapModeT = int(tex_props.wrapModeT)
+            texture.minFilter = int(tex_props.minFilter)
+            texture.magFilter = int(tex_props.magFilter)
+            texture.mipDetail = tex_props.mipDetail
+            texture.unk1 = tex_props.unk1
+            texture.LOD = tex_props.LOD
 
         model_props: NudPropertyGroup = model.xfbin_nud_data
 
@@ -908,88 +928,59 @@ class XfbinExporter:
         if len(mat_props.NUD_Shaders) > 0:
             shader_count = 0
 
-            shader = mat_props.NUD_Shaders[0]
-            shader: NUD_ShaderPropertyGroup
-            m = NudMaterial()
-            m.flags = hex_str_to_int(shader.name)
+            if model.xfbin_nud_data.bone_flag != 16:
 
-            shader_count += 1
-            
-            if material.xfbin_material_data.use_object_props:
-                set_shader_props(m, model.xfbin_nud_data.shader_settings)
-            else:
-                set_shader_props(m, shader)
+                shader = mat_props.NUD_Shaders[shader_count]
+                shader: NUD_ShaderPropertyGroup
+                m = NudMaterial()
+                m.flags = hex_str_to_int(shader.name)
 
-            m.textures = list()
-            for texture in mat_props.NUTextures:
-                t = NudMaterialTexture()
+                shader_count += 1
+                
+                if material.xfbin_material_data.use_object_props:
+                    set_shader_props(m, model.xfbin_nud_data.shader_settings)
+                else:
+                    set_shader_props(m, shader)
 
-                t.baseID = texture.baseID
-                t.groupID = texture.groupID
-                t.subGroupID = texture.subGroupID
-                t.textureID = texture.textureID
-                t.mapMode = texture.mapMode
-                t.wrapModeS = int(texture.wrapModeS)
-                t.wrapModeT = int(texture.wrapModeT)
-                t.minFilter = int(texture.minFilter)
-                t.magFilter = int(texture.magFilter)
-                t.mipDetail = texture.mipDetail
-                t.unk1 = texture.unk1
-                t.LOD = texture.LOD
+                m.textures = list()
+                for texture in mat_props.NUTextures:
+                    t = NudMaterialTexture()
 
-                m.textures.append(t)
+                    set_texture_props(t, texture)
 
-            m.properties = list()
-            
-            for param in shader.shader_params:
-                param: NUD_ShaderParamPropertyGroup
-                p = NudMaterialProperty()
-                p.name = param.name
+                    m.textures.append(t)
 
-                p.values = list()
-                for i in range(param.count):
-                    p.values.append(param.values[i].value)
+                m.properties = list()
+                
+                for param in shader.shader_params:
+                    param: NUD_ShaderParamPropertyGroup
+                    p = NudMaterialProperty()
+                    p.name = param.name
 
-                m.properties.append(p)
+                    p.values = list()
+                    for i in range(param.count):
+                        p.values.append(param.values[i].value)
 
-            shaders.append(m)
+                    m.properties.append(p)
+
+                shaders.append(m)
 
             # make extra shaders depending on the flags
             if RiggingFlag.OUTLINE in model_flags:
                 shader = mat_props.NUD_Shaders[shader_count]
-                shader_count += 1
                 m = NudMaterial()
                 
                 m.flags = hex_str_to_int(shader.name)
 
                 shader_count += 1
 
-                m.sourceFactor = shader.source_factor
-                m.destFactor = shader.destination_factor
-                m.alphaTest = shader.alpha_test
-                m.alphaFunction = shader.alpha_function
-                m.refAlpha = shader.alpha_reference
-                m.cullMode = int(shader.cull_mode)
-                m.unk1 = shader.unk1
-                m.unk2 = shader.unk2
-                m.zBufferOffset = shader.zbuffer_offset
+                set_shader_props(m, shader)
 
                 m.textures = list()
                 for texture in mat_props.NUTextures:
                     t = NudMaterialTexture()
 
-                    t.baseID = texture.baseID
-                    t.groupID = texture.groupID
-                    t.subGroupID = texture.subGroupID
-                    t.textureID = texture.textureID
-                    t.mapMode = 0
-                    t.wrapModeS = int(texture.wrapModeS)
-                    t.wrapModeT = int(texture.wrapModeT)
-                    t.minFilter = int(texture.minFilter)
-                    t.magFilter = int(texture.magFilter)
-                    t.mipDetail = texture.mipDetail
-                    t.unk1 = texture.unk1
-                    t.LOD = texture.LOD
+                    set_texture_props(t, texture)
 
                     m.textures.append(t)
 
@@ -1008,12 +999,39 @@ class XfbinExporter:
                 shaders.append(m)
             
             if RiggingFlag.BLUR in model_flags:
+                shader = mat_props.NUD_Shaders[shader_count]
                 shader_count += 1
                 m = NudMaterial()
+
+                if len(mat_props.NUD_Shaders) > shader_count:
                 
-                #copy the first shader
-                for attr, value in shaders[0].__dict__.items():
-                    setattr(m, attr, value)
+                    #copy the first shader
+                    for attr, value in shaders[0].__dict__.items():
+                        setattr(m, attr, value)
+                
+                else:
+                    set_shader_props(m, shader)
+
+                    m.textures = list()
+                    for texture in mat_props.NUTextures:
+                        t = NudMaterialTexture()
+
+                        set_texture_props(t, texture)
+
+                        m.textures.append(t)
+
+                    m.properties = list()
+                    for param in shader.shader_params:
+                        param: NUD_ShaderParamPropertyGroup
+                        p = NudMaterialProperty()
+                        p.name = param.name
+
+                        p.values = list()
+                        for i in range(param.count):
+                            p.values.append(param.values[i].value)
+
+                        m.properties.append(p)
+
 
                 #change the shader name depending on the skinning flag
                 if RiggingFlag.UNSKINNED in model_flags:
@@ -1024,13 +1042,39 @@ class XfbinExporter:
                 shaders.append(m)
             
             if RiggingFlag.SHADOW in model_flags:
-                #shader = mat_props.NUD_Shaders[shader_count]
+                shader = mat_props.NUD_Shaders[shader_count]
                 shader_count += 1
                 m = NudMaterial()
 
-                #copy the first shader
-                for attr, value in shaders[0].__dict__.items():
-                    setattr(m, attr, value)
+                if len(mat_props.NUD_Shaders) > shader_count:
+                
+                    #copy the first shader
+                    for attr, value in shaders[0].__dict__.items():
+                        setattr(m, attr, value)
+                
+                else:
+                    set_shader_props(m, shader)
+
+                    m.textures = list()
+                    for texture in mat_props.NUTextures:
+                        t = NudMaterialTexture()
+
+                        set_texture_props(t, texture)
+
+                        m.textures.append(t)
+
+                    m.properties = list()
+                    for param in shader.shader_params:
+                        param: NUD_ShaderParamPropertyGroup
+                        p = NudMaterialProperty()
+                        p.name = param.name
+
+                        p.values = list()
+                        for i in range(param.count):
+                            p.values.append(param.values[i].value)
+
+                        m.properties.append(p)
+
 
                 #get the correct shader name
                 m.flags = 0x0000E001
@@ -1174,36 +1218,35 @@ class XfbinExporter:
         
         return chunk
     
-    def make_dynamics(self, dynamics_obj: Object, context, clump: NuccChunkClump) -> NuccChunkDynamics:
-        context.view_layer.objects.active = dynamics_obj
-        dynamics_data: DynamicsPropertyGroup = dynamics_obj.xfbin_dynamics_data
-        dynamics = NuccChunkDynamics(dynamics_data.path, dynamics_data.clump_name)
+    def make_dynamics(self, armature_obj: Object, clump: NuccChunkClump, context) -> NuccChunkDynamics:
+        dynamics_data: DynamicsPropertyGroup = armature_obj.xfbin_dynamics_data
+        clump_data: ClumpPropertyGroup = armature_obj.xfbin_clump_data
+        dynamics = NuccChunkDynamics(clump_data.path, clump_data.name)
         dynamics.has_data = True
         dynamics.has_props = True
         dynamics.clump_chunk = clump
 
         dynamics.SPGroupCount = len(dynamics_data.spring_groups)
         dynamics.ColSphereCount = len(dynamics_data.collision_spheres)
-
-        #update dynamics chunk values before exporting
-        #bpy.ops.object.update_dynamics()
        
+        spring_group_names = []
         dynamics.SPGroup = list()
-        for dynamic in sorted(dynamics_data.spring_groups, key= lambda x: x.spring_group_index): 
-            dynamic: SpringGroupsPropertyGroup
+        for spring_group in dynamics_data.spring_groups:
+            spring_group: SpringGroupsPropertyGroup
             d = Dynamics1()
             
-            d.Bounciness = dynamic.dyn1
-            d.Elasticity = dynamic.dyn2
-            d.Stiffness = dynamic.dyn3
-            d.Movement = dynamic.dyn4
-            d.coord_index = dynamic.bone_index
-            d.BonesCount = dynamic.bone_count
-            d.shorts = list()
+            d.Bounciness = spring_group.dyn1
+            d.Elasticity = spring_group.dyn2
+            d.Stiffness = spring_group.dyn3
+            d.Movement = spring_group.dyn4
+            d.coord_index = armature_obj.data.bones.find(spring_group.bone_spring)
+            d.BonesCount = len(armature_obj.data.bones[spring_group.bone_spring].children_recursive) + 1
+            d.shorts = [0] * d.BonesCount
             
-            for flag in dynamic.flags:
-                d.shorts.append(flag.value)
             dynamics.SPGroup.append(d)
+            spring_group_names.append(spring_group.bone_spring)
+        
+        dynamics.SPGroup = sorted(dynamics.SPGroup, key=lambda x: x.coord_index)
         
         dynamics.ColSphere = list()
         for col in dynamics_data.collision_spheres:
@@ -1218,26 +1261,14 @@ class XfbinExporter:
             c.scale_z = col.scale_z
             c.coord_index = col.bone_index
 
-            if col.attach_groups == True:
-                col.attach_groups = 1
-            else:
-                col.attach_groups = 0
-            c.attach_groups = col.attach_groups
+            c.attach_groups = int(col.attach_groups)
 
             c.negative_unk = -1
-            c.attached_groups = 0
             
             c.attached_groups_count = col.attached_count
 
-            c.attached_groups = list()
-            
-            for i, g in enumerate(col.attached_groups):
-                #print(i, g.value)
-                if i <= col.attached_count:
-                    if dynamics_data.spring_groups.get(g.value):
-                        c.attached_groups.append(dynamics_data.spring_groups.get(g.value).spring_group_index)
-                elif i > col.attached_count:
-                    print(f"Warning: Attached group {g.value} index out of range")          
+            c.attached_groups = [spring_group_names.index(group.bone_spring) for group in col.attached_groups if group.bone_spring in spring_group_names]
+
             dynamics.ColSphere.append(c)
 
         return dynamics

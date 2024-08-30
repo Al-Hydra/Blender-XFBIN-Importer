@@ -731,8 +731,13 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
                 s.init_data(main_shader)
 
         if mesh_flags[0] & 0x4:
-            s_type_index += 1
-            outline_shader = mesh.materials[s_type_index]
+            try:
+                s_type_index += 1
+                outline_shader = mesh.materials[s_type_index]
+            except:
+                s_type_index -= 1
+                outline_shader = mesh.materials[s_type_index]
+            
 
             if self.outlineShader.is_initialized:
                 self.outlineShader.init_data(outline_shader)
@@ -742,8 +747,12 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
                 s.init_data(outline_shader)
 
         if mesh_flags[0] & 0x10:
-            s_type_index += 1
-            blur_shader = mesh.materials[s_type_index]
+            try:
+                s_type_index += 1
+                blur_shader = mesh.materials[s_type_index]
+            except:
+                s_type_index -= 1
+                blur_shader = mesh.materials[s_type_index]
 
             if self.blurShader.is_initialized:
                 self.blurShader.init_data(blur_shader)
@@ -753,8 +762,12 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
                 s.init_data(blur_shader)
         
         if mesh_flags[0] & 0x20:
-            s_type_index += 1
-            shadow_shader = mesh.materials[s_type_index]
+            try:
+                s_type_index += 1
+                shadow_shader = mesh.materials[s_type_index]
+            except:
+                s_type_index -= 1
+                shadow_shader = mesh.materials[s_type_index]
 
             if self.shadowShader.is_initialized:
                 self.shadowShader.init_data(shadow_shader)

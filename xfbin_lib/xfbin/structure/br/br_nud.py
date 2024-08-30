@@ -529,10 +529,10 @@ class BrNudMaterialTexture(BrStruct):
         self.LOD = br.read_uint16()
 
     def __br_write__(self, br: 'BinaryReader', texture: 'NudMaterialTexture') -> None:
-        br.write_int8(texture.baseID)
-        br.write_int8(texture.groupID)
-        br.write_int8(texture.subGroupID)
-        br.write_int8(texture.textureID)
+        br.write_uint8(texture.baseID)
+        br.write_uint8(texture.groupID)
+        br.write_uint8(texture.subGroupID)
+        br.write_uint8(texture.textureID)
         br.write_uint32(0)
 
         br.write_uint16(0)

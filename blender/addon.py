@@ -25,6 +25,7 @@ from .panels.texture_chunks_panel import (TextureChunksListPropertyGroup,
                                           texture_chunks_classes,
                                           texture_chunks_property_groups)
 from .panels.dynamics_panel import (DynamicsPropertyGroup,
+                                    XfbinDynamicsClipboardPropertyGroup,
                                     dynamics_chunks_classes,
                                     dynamics_chunks_property_groups
                                     
@@ -113,6 +114,7 @@ def register():
     #create pointer properties to be used as a clipboard
     bpy.types.Scene.xfbin_clipboard = PointerProperty(type=XfbinPointersGroup)
     bpy.types.Scene.xfbin_material_clipboard = PointerProperty(type=XfbinMatClipboardPropertyGroup)
+    bpy.types.Scene.xfbin_dynamics_clipboard = PointerProperty(type=XfbinDynamicsClipboardPropertyGroup)
 
 
 def unregister():
@@ -130,6 +132,7 @@ def unregister():
     del bpy.types.Object.xfbin_pointers
     del bpy.types.Scene.xfbin_clipboard
     del bpy.types.Scene.xfbin_material_clipboard
+    del bpy.types.Scene.xfbin_dynamics_clipboard
 
     bpy.utils.unregister_class(XfbinPointersGroup)
 

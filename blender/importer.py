@@ -255,26 +255,29 @@ class XfbinImporter:
         # it's always better to import textures first, then models, then animations
         texture_chunks: List[NuccChunkTexture] = list()
         clump_chunks: List[NuccChunkClump] = list()
-        dynamics_chunks: List[NuccChunkDynamics] = list()
+        dynamics_chunks = {}
         anm_chunks: List[NuccChunkAnm] = list()
         cam_chunks: List[NuccChunkCamera] = list()
 
         if self.clear_textures:
             bpy.context.scene.xfbin_texture_chunks_data.clear()
 
+        #sort the chunks by type
 
         for page in self.xfbin.pages:
-            # Add all texture chunks inside the xfbin
-            texture_chunks.extend(page.get_chunks_by_type('nuccChunkTexture'))
-
-            dynamics_chunks.extend(page.get_chunks_by_type('nuccChunkDynamics'))
-
-            clump_chunks.extend(page.get_chunks_by_type('nuccChunkClump'))
-            anm_chunks.extend(page.get_chunks_by_type('NuccChunkAnm'))
-            cam_chunks.extend(page.get_chunks_by_type('NuccChunkCamera'))
+            for chunk in page.chunks:
+                if isinstance(chunk, NuccChunkTexture):
+                    texture_chunks.append(chunk)
+                elif isinstance(chunk, NuccChunkClump):
+                    clump_chunks.append(chunk)
+                elif isinstance(chunk, NuccChunkAnm):
+                    anm_chunks.append(chunk)
+                elif isinstance(chunk, NuccChunkCamera):
+                    cam_chunks.append(chunk)
+                elif isinstance(chunk, NuccChunkDynamics):
+                    dynamics_chunks.update({chunk.name: chunk})
 
             
-
         # Set the Xfbin textures properties
         bpy.context.scene.xfbin_texture_chunks_data.init_data(texture_chunks)
 
@@ -296,11 +299,16 @@ class XfbinImporter:
 
             # Update the models' PointerProperty to use the models that were just imported
             armature_obj.xfbin_clump_data.update_models(armature_obj)
+
+            #add clump dynamics
+            clump_dynamics = dynamics_chunks.get(clump.name)
+            if clump_dynamics:
+                self.make_dynamics(armature_obj, clump_dynamics, context)
         
         # Import all dynamics chunks
-        for dyn in dynamics_chunks:
+        '''for dyn in dynamics_chunks:
             dyn: NuccChunkDynamics = dyn
-            self.make_dynamics(dyn, context)
+            self.make_dynamics(dyn, context)'''
     
         # Create an empty object to store the anm chunks list
         empty_anm = bpy.data.objects.new(
@@ -341,22 +349,18 @@ class XfbinImporter:
         context.collection.children.link(collection)
         return collection
 
-    def make_dynamics(self, dynamics: NuccChunkDynamics, context):
-
-        dynamics_obj = bpy.data.objects.new(
-            f'{XFBIN_DYNAMICS_OBJ} [{dynamics.name}]', None)
-        dynamics_obj.empty_display_size = 0
-
+    def make_dynamics(self, dynamics_obj, dynamics: NuccChunkDynamics, context):
         # Set the Xfbin dynamics properties
-        dynamics_obj.xfbin_dynamics_data.init_data(dynamics)
+        dynamics_obj.xfbin_dynamics_data.init_data(context, dynamics)
 
         # Use Spring Group names instead of indices for attached spring groups
-        for col in dynamics_obj.xfbin_dynamics_data.collision_spheres:
+        '''for col in dynamics_obj.xfbin_dynamics_data.collision_spheres:
             if col.attach_groups == True and col.attached_count > 0:
                 for c in range(col.attached_count):
-                    col.attached_groups[c].value = next((sp.name for sp in dynamics_obj.xfbin_dynamics_data.spring_groups if col.attached_groups[c].value == str(sp.spring_group_index)), None)
+                    col.attached_groups[c].value = next((sp.name for sp in dynamics_obj.xfbin_dynamics_data.spring_groups if col.attached_groups[c].value == str(sp.spring_group_index)), None)'''
 
-        self.collection.objects.link(dynamics_obj)
+        if dynamics_obj.type != "ARMATURE":
+            self.collection.objects.link(dynamics_obj)
 
     def make_armature(self, clump: NuccChunkClump, context):
         armature_name = clump.name

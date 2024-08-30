@@ -316,8 +316,8 @@ class BrClumpModelGroup(BrStruct):
             self.flag0 = br.read_uint8()
             self.flag1 = br.read_uint8()
 
-            # Seems to be some 4 signed 8 bit integers
-            self.unk = br.read_int32()
+            # LOD Distance
+            self.unk = br.read_float()
 
             self.modelIndices = list()
             for _ in range(self.modelCount):
@@ -331,7 +331,7 @@ class BrClumpModelGroup(BrStruct):
         br.write_uint8(model_group.flag0)
         br.write_uint8(model_group.flag1)
 
-        br.write_int32(model_group.unk)
+        br.write_float(model_group.unk)
 
         br.write_int32(tuple(map(lambda x: chunkIndexDict.get_or_next(
             x) if x else -1, model_group.model_chunks)))
