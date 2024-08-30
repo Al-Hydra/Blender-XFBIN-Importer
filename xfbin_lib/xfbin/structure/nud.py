@@ -46,6 +46,7 @@ class NudMeshGroup:
         self.name = br_mesh_group.name
         self.bone_flags = br_mesh_group.boneFlags
         self.bounding_sphere = br_mesh_group.boundingSphere
+        self.unk_values = br_mesh_group.unkValues
 
         self.meshes = list()
         for br_mesh in br_mesh_group.meshes:

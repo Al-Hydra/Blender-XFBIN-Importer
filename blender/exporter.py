@@ -171,8 +171,8 @@ class ExportXfbin(Operator, ExportHelper):
         layout.prop_search(self, 'collection', bpy.data, 'collections')
 
         if self.collection:
-            #inject_row = layout.row()
-            #inject_row.prop(self, 'inject_to_xfbin')
+            inject_row = layout.row()
+            inject_row.prop(self, 'inject_to_xfbin')
 
             layout.prop(self, 'export_textures')
             layout.prop(self, 'export_clumps')
@@ -655,8 +655,8 @@ class XfbinExporter:
             chunk.bounding_box = list((min_corner * 100)) + list((max_corner * 100)) if nud_data.model_attributes & 0x04 else tuple()
 
             chunk.nud.bounding_sphere = pos_m_to_cm_tuple([*center, radius])
-            mesh_group.bounding_sphere = pos_m_to_cm_tuple([*center, radius]) + (0,0,0,0)
-
+            mesh_group.bounding_sphere = pos_m_to_cm_tuple([*center, radius])
+            mesh_group.unk_values = nud_data.unk_values
             #set the current object as the active object
             context.view_layer.objects.active = obj
             bpy.ops.object.mode_set(mode='OBJECT')
@@ -665,7 +665,9 @@ class XfbinExporter:
             mesh: Mesh = obj.evaluated_get(context.evaluated_depsgraph_get()).data
 
             # Transform the mesh by the inverse of its bone's matrix, if it was not parented to it
-            if mesh_bone:
+            if mesh_bone and mesh_bone.get("matrix"):
+                mesh.transform(Matrix(mesh_bone["matrix"]).inverted())
+            elif mesh_bone:
                 mesh.transform(mesh_bone.matrix_local.inverted())
 
             #triangulate the mesh
@@ -802,11 +804,11 @@ class XfbinExporter:
 
                 #we'll set the vertex type to 3 if the mesh is deformable and 7 if not
                 if RiggingFlag.SKINNED in chunk.rigging_flag: 
-                    mat_mesh.vertex_type = int(3)
+                    mat_mesh.vertex_type = int(0x03)
                     mat_mesh.bone_type = int(0x10)
                     mat_mesh.face_flag = int(4)
                 else:
-                    mat_mesh.vertex_type = int(7)
+                    mat_mesh.vertex_type = int(0x07)
                     mat_mesh.bone_type = int(0x00)
                     mat_mesh.face_flag = int(0x00)
                 
@@ -1131,13 +1133,13 @@ class XfbinExporter:
         for mattex in mat.xfbin_material_data.NUTextures:
             texture: XfbinTextureChunkPropertyGroup = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(mattex.name)
             t = NuccChunkTexture(texture.path, texture.name)
-            if not texture.reference:
+            if not texture.reference and self.export_textures:
                 t.has_data = True
                 t.has_props = True
                 t.nut = Nut()
                 t.nut.magic = 'NTP3'
                 t.nut.version = 0x100
-                t.nut.textures = []
+                t.nut.textures = [] 
                 t.nut.texture_count = 0
 
                 if texture.textures:

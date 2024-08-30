@@ -92,10 +92,15 @@ class NudPropertyGroup(PropertyGroup):
 
     bounding_sphere_group: FloatVectorProperty(
         name='Bounding Sphere (Group)',
-        size=8,
+        size=4,
     )
 
     shader_settings: bpy.props.PointerProperty(type=NUD_ShaderPropertyGroup)
+
+    unk_values: FloatVectorProperty(
+        name='Unknown Values',
+        size=4,
+    )
 
     def init_data(self, model: NuccChunkModel, mesh_bone: str):
         #print(f"model name: {model.name}")
@@ -148,6 +153,8 @@ class NudPropertyGroup(PropertyGroup):
         # Set the shader settings
         self.shader_settings.init_data(model.nud.mesh_groups[0].meshes[0].materials[0])
 
+        # Set the vertex format
+        self.unk_values = model.nud.mesh_groups[0].unk_values
 
 
 class NudPropertyPanel(Panel):
@@ -183,7 +190,11 @@ class NudPropertyPanel(Panel):
         box.prop(data, 'rigging_flag')
         box.prop(data, 'rigging_flag_extra')
 
-        layout.prop(data, 'bone_flag')
+        row = layout.row()
+        row.prop(data, 'bone_flag')
+
+        row = layout.row()
+        row.prop(data, 'unk_values')
 
         box = layout.box()
         row = box.row()

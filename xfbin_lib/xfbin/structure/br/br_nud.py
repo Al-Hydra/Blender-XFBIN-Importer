@@ -121,7 +121,8 @@ class BrNudMeshGroup(BrStruct):
     meshes: List['BrNudMesh']
 
     def __br_read__(self, br: BinaryReader, nud: BrNud) -> None:
-        self.boundingSphere = br.read_float(8)
+        self.boundingSphere = br.read_float(4)
+        self.unkValues = br.read_float(4)
         self.nameStart = br.read_uint32()
 
         with br.seek_to(self.nameStart + nud.nameStart):
@@ -140,6 +141,9 @@ class BrNudMeshGroup(BrStruct):
     def __br_write__(self, br: 'BinaryReader', mesh_group: 'NudMeshGroup', buffers: NudBuffers, mesh_groups_count, mesh_count):
         # Bounding sphere
         br.write_float(mesh_group.bounding_sphere)
+
+        # Unknown values
+        br.write_float(mesh_group.unk_values)
 
         # Name start in names buffer
         br.write_uint32(buffers.names.size())
@@ -411,10 +415,10 @@ class BrNudVertex(BrStruct):
             br.write_float(0)
         elif vertexType == NudVertexType.NormalsHalfFloat:
             br.write_half_float(vertex.normal)
-            br.write_half_float(1.0)
+            br.write_half_float(0)
         elif vertexType == NudVertexType.NormalsTanBiTanHalfFloat:
             br.write_half_float(vertex.normal)
-            br.write_half_float(1.0)
+            br.write_half_float(0)
             br.write_half_float(vertex.bitangent[:3])
             br.write_half_float(0)
             br.write_half_float(vertex.tangent[:3])
