@@ -28,7 +28,7 @@ from ..xfbin_lib.xfbin.structure import dds
 from .common.coordinate_converter import *
 from .common.helpers import (XFBIN_DYNAMICS_OBJ, XFBIN_ANMS_OBJ, XFBIN_TEXTURES_OBJ,
                              int_to_hex_str)
-from .common.shaders import (shaders_dict, collision_mat)
+from .materials.shaders import (shaders_dict, collision_mat)
 import cProfile
 
 
@@ -782,23 +782,18 @@ class XfbinImporter:
         material_name = xfbin_mat.name
         if not bpy.data.materials.get(material_name):
             
-            material = bpy.data.materials.new(material_name)
-            material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+            #material = bpy.data.materials.new(material_name)
+            #material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
 
-            meshmat = mesh.materials[0]
+            #meshmat = mesh.materials[0]
             
-            shader = int_to_hex_str(meshmat.flags, 4)
+            shader = int_to_hex_str(mesh.materials[0].flags, 4)
             
 
-            '''if shader in shaders_dict:
-                material = shaders_dict.get(shader)(
-                    self, meshmat, xfbin_mat, material_name, material_name)
-                
-                material.xfbin_material_data.init_data(xfbin_mat)
-                materials.append(material)
-            else:'''
-            material = shaders_dict.get("default")(
-                self, meshmat, xfbin_mat, material, material_name)
+            if shader == "00 00 F0 0A":
+                material = shaders_dict.get("00 00 F0 0A")(self, mesh, xfbin_mat, mesh_flags)
+            else:
+                material = shaders_dict.get("default")( self, mesh, xfbin_mat, mesh_flags)
 
             
         else:
