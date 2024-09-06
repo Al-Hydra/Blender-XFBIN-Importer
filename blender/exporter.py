@@ -1115,8 +1115,8 @@ class XfbinExporter:
         
         if pg.Blend:
             chunk.flags |= 0x10
-            chunk.BlendRate = pg.blendRate
-            chunk.BlendType = pg.blendType
+            chunk.BlendRate = pg.blendRate[0]
+            chunk.BlendType = pg.blendRate[1]
         
         if pg.useFallOff:
             chunk.flags |= 0x20

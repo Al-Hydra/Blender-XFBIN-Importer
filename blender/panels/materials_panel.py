@@ -117,8 +117,8 @@ class XfbinMaterialTexturesPropertyGroup(PropertyGroup):
                             ('5', 'Nearest Mipmap Linear', ''),
                             ('6', 'Linear Mipmap Linear', ''),
                             ))
-    mapMode: IntProperty(default=6)
-    mipDetail: IntProperty()
+    mapMode: IntProperty(default=0)
+    mipDetail: IntProperty(default=6)
     wrapModeS: EnumProperty(default='1', items=(
                             ('1', 'Repeat', ''),
                             ('2', 'Mirror', ''),
@@ -395,7 +395,7 @@ class XFBIN_MatParam_OT_Copy(bpy.types.Operator):
 
         if len(shader.shader_params) > 0:
             clipboard: XfbinMatClipboardPropertyGroup = bpy.context.scene.xfbin_material_clipboard
-            clipboard.param_clipboard.init_copy(shader.shader_params[param_index])
+            clipboard.shader_param_clipboard.init_copy(shader.shader_params[param_index])
 
             self.report({'INFO'}, f'Param ({shader.shader_params[param_index].name}) from ({obj.active_material.name}) to clipboard')
         return {'FINISHED'}
@@ -417,9 +417,9 @@ class XFBIN_MatParam_OT_Paste(bpy.types.Operator):
 
         if len(shader.shader_params) > 0:
             newParam: NUD_ShaderParamPropertyGroup = shader.shader_params.add()
-            newParam.init_copy(clipboard.param_clipboard)
+            newParam.init_copy(clipboard.shader_param_clipboard)
 
-            self.report({'INFO'}, f'Param ({clipboard.param_clipboard.name}) from clipboard to ({obj.active_material.name})')
+            self.report({'INFO'}, f'Param ({clipboard.shader_param_clipboard.name}) from clipboard to ({obj.active_material.name})')
         
 
         return {'FINISHED'}
@@ -593,7 +593,7 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
     UV1: BoolProperty(name='Use UV1')
     UV2: BoolProperty(name='Use UV2')
     UV3: BoolProperty(name='Use UV3')
-    Blend: BoolProperty(name='Use Blend Rate and Type')
+    Blend: BoolProperty(name='Use Blend Rate')
     useFallOff: BoolProperty(name='Use fallOff')
     useOutlineID: BoolProperty(name='Use outlineID')
 
@@ -601,8 +601,7 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
     uvOffset1: FloatVectorProperty(name='uvOffset1', size=4, default=(0.0, 0.0, 1.0, 1.0))
     uvOffset2: FloatVectorProperty(name='uvOffset2', size=4, default=(0.0, 0.0, 1.0, 1.0))
     uvOffset3: FloatVectorProperty(name='uvOffset3', size=4, default=(0.0, 0.0, 1.0, 1.0))
-    blendRate: FloatProperty(name='Blend Rate')
-    blendType: FloatProperty(name='Blend Type')
+    blendRate: FloatVectorProperty(name='', size=2, default=(0.0, 0.0))
     fallOff: FloatProperty(name='fallOff')
     outlineID: FloatProperty(name='outlineID', default=1)
 
@@ -670,8 +669,8 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
         self.UV3 = False
         self.uvOffset3 = (0.0, 0.0, 1.0, 1.0)
         self.Blend = False
-        self.blendRate = 0.0
-        self.blendType = 0.0
+        self.blendRate[0] = 0.0
+        self.blendRate[1] = 0.0
         self.useFallOff = False
         self.fallOff = 0.0
         self.useOutlineID = False
@@ -701,8 +700,8 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
             self.uvOffset3 = material.UV3
         if material.flags & 0x10:
             self.Blend = True
-            self.blendRate = material.BlendRate
-            self.blendType = material.BlendType
+            self.blendRate[0] = material.BlendRate
+            self.blendRate[1] = material.BlendType
         if material.flags & 0x20:
             self.useFallOff = True
             self.fallOff = material.fallOff
@@ -823,7 +822,6 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
         self.uvOffset3 = matprop.uvOffset3
         self.Blend = matprop.Blend
         self.blendRate = matprop.blendRate
-        self.blendType = matprop.blendType
         self.useFallOff = matprop.useFallOff
         self.fallOff = matprop.fallOff
         self.useOutlineID = matprop.useOutlineID
@@ -906,7 +904,6 @@ class XfbinMaterialPropertyPanel(Panel):
             row = box.row()
             if material.Blend:
                 row.prop(material, 'blendRate')
-                row.prop(material, 'blendType')
                         
             if material.useFallOff:
                 row.prop(material, 'fallOff')

@@ -790,8 +790,8 @@ class XfbinImporter:
             shader = int_to_hex_str(mesh.materials[0].flags, 4)
             
 
-            if shader == "00 00 F0 0A":
-                material = shaders_dict.get("00 00 F0 0A")(self, mesh, xfbin_mat, mesh_flags)
+            if shader in shaders_dict:
+                material = shaders_dict.get(shader)(self, mesh, xfbin_mat, mesh_flags)
             else:
                 material = shaders_dict.get("default")( self, mesh, xfbin_mat, mesh_flags)
 
