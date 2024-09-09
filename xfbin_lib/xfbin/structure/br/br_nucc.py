@@ -8,6 +8,7 @@ from .br_nut import *
 class BrNuccChunk(BrStruct):
     name: str
     filePath: str
+    chunk_type: str
     data: bytearray
     version: int
     anmvalue: int
@@ -16,11 +17,12 @@ class BrNuccChunk(BrStruct):
     # Only used when writing
     nuccChunk: 'NuccChunk'
 
-    def __br_read__(self, br: 'BinaryReader', file_path, name, version, anmvalue) -> None:
+    def __br_read__(self, br: 'BinaryReader', file_path, name, chunk_type, version, anmvalue) -> None:
         # When the BrNuccChunk is read, the init_data method of the BrNuccChunk type will be called,
         # which means that this method does not have to be overrided in each subclass
         self.filePath = file_path
         self.name = name
+        self.type = chunk_type
         self.version = version
         self.anmvalue = anmvalue
         #if self.version:# != 0x79 and self.version != 0x7A:
@@ -60,7 +62,7 @@ class BrNuccChunk(BrStruct):
     @classmethod
     def create_from_nucc_type(cls, type_str, file_path, name, data, version, anmvalue) -> 'BrNuccChunk':
         # Read a BrNuccChunk struct from the data using the type and set the name and file path
-        return BinaryReader(data, Endian.BIG).read_struct(cls.get_br_nucc_type_from_str(type_str), None, file_path, name, version, anmvalue)
+        return BinaryReader(data, Endian.BIG).read_struct(cls.get_br_nucc_type_from_str(type_str), None, file_path, name, type_str, version, anmvalue)
 
 
 class BrNuccChunkNull(BrNuccChunk):
@@ -526,9 +528,9 @@ class BrNuccChunkCoord(BrNuccChunk):
         self.position = br.read_float(3)
         self.rotation = br.read_float(3)  # Rotation is in euler
         self.scale = br.read_float(3)
-        self.unkFloat = br.read_float()   # Might be part of scale
+        self.opacity = br.read_float()   # Might be part of scale
         if self.version > 0x66:
-            self.unkShort = br.read_uint16()  # Not always 0
+            self.flags = br.read_uint16()  # Not always 0
         else:
             self.unkShort = 0
 
@@ -538,8 +540,8 @@ class BrNuccChunkCoord(BrNuccChunk):
         br.write_float(node.position)
         br.write_float(node.rotation)
         br.write_float(node.scale)
-        br.write_float(node.unkFloat)
-        br.write_uint16(node.unkShort)
+        br.write_float(node.opacity)
+        br.write_uint16(node.flags)
 
 
 class BrNuccChunkModelHit(BrNuccChunk):

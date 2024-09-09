@@ -419,8 +419,8 @@ class XfbinImporter:
             bone['scale_signs'] = [-1 if x < 0 else 1 for x in node.scale]
 
             # Store these unknown values to set when exporting
-            bone['unk_float'] = node.unkFloat
-            bone['unk_short'] = node.unkShort
+            bone['opacity'] = node.opacity
+            bone['flags'] = node.flags
             bone['matrix'] = node.matrix
             bone["orig_coords"] = [node.position, node.rotation, node.scale]
             bone["rotation_quat"] = rot
@@ -438,6 +438,10 @@ class XfbinImporter:
         
         
         bpy.ops.object.mode_set(mode='OBJECT')
+
+        #add the opacity property in pose mode
+        for b in armature_obj.pose.bones:
+            b["opacity"] = float(armature_obj.data.bones[b.name]['opacity'])
 
         return armature_obj
 
@@ -920,16 +924,16 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
                 arm_bone.rotation_mode = "QUATERNION"
                 
 
-        for bone in clump.bones:
-            group_name = action.groups.new(bone.name).name
+        for child in clump.children:
+            group_name = action.groups.new(child.name).name
 
-            if bone.anm_entry is None:
+            if child.anm_entry is None:
                 continue
 
 
-            mat_parent = arm_mat.get(bone.parent.name, Matrix.Identity(
-                4)) if bone.parent else Matrix.Identity(4)
-            mat = arm_mat.get(bone.name, Matrix.Identity(4))
+            mat_parent = arm_mat.get(child.parent.name, Matrix.Identity(
+                4)) if child.parent else Matrix.Identity(4)
+            mat = arm_mat.get(child.name, Matrix.Identity(4))
 
             mat = (mat_parent.inverted() @ mat)
             loc, rot, sca = mat.decompose()
@@ -939,17 +943,17 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
             bone_path = f'pose.bones["{group_name}"]'
 
             bone_parent = False
-            if bone.parent:
+            if child.parent:
                 bone_parent = True
 
 
-            for curve in bone.anm_entry.curves:
+            for curve in child.anm_entry.curves:
                 if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
                     continue
 
                 frames = list(map(lambda x: frame_to_blender(x.frame), curve.keyframes))
 
-                if (bone.parent != None):
+                if (child.parent != None):
                     #values = convert_anm_values_tranformed(curve.data_path, list(map(lambda x: x.value, curve.keyframes)), loc, rot, sca, rotate_vector, bone_parent)
                     values = convert_anm_values_tranformed(curve.data_path, [x.value for x in curve.keyframes], loc, rot, sca, bone_parent)
                 else:

@@ -19,10 +19,11 @@ class NuccChunk:
 
     chunks: List['NuccChunk']
 
-    def __init__(self, file_path, name):
+    def __init__(self, file_path, name, type_str):
         self.extension = ''
         self.filePath = file_path
         self.name = name
+        self.type = type_str
 
         self.has_data = False
         self.has_props = False
@@ -39,6 +40,8 @@ class NuccChunk:
         """Initializes the data of this `NuccChunk` from a `BrNuccChunk`, using a chunk list and a list of
         local page indices for properly setting references to other `NuccChunk`s
         """
+        self.type = br_chunk.type
+        self.version = br_chunk.version
         self.data = br_chunk.data
         #self.version = br_chunk.version
         self.has_data = True
@@ -89,7 +92,7 @@ class NuccChunk:
 
     @classmethod
     def create_from_nucc_type(cls, type_str, file_path, name) -> 'NuccChunk':
-        return cls.get_nucc_type_from_str(type_str)(file_path, name)
+        return cls.get_nucc_type_from_str(type_str)(file_path, name, type_str)
 
     @classmethod
     def get_all_nucc_types(cls):
@@ -108,28 +111,28 @@ class NuccChunk:
 
 class NuccChunkNull(NuccChunk):
     # Empty
-    def __init__(self, file_path='', name='', version=0x79):
-        super().__init__(file_path, name)
+    def __init__(self, file_path='', name='',type_str= "NuccChunkNull", version=0x79):
+        super().__init__(file_path, name, type_str)
         self.has_props = True
 
 
 class NuccChunkPage(NuccChunk):
     # Should not be used as a NuccChunk, except when writing
-    def __init__(self, file_path='', name='Page0', version=0x79):
-        super().__init__(file_path, name)
+    def __init__(self, file_path='', name='Page0',type_str= "NuccChunkPage", version=0x79):
+        super().__init__(file_path, name, type_str)
         self.has_props = True
 
 
 class NuccChunkIndex(NuccChunk):
     # Does not exist
-    def __init__(self, file_path='', name='index', version=0x79):
-        super().__init__(file_path, name)
+    def __init__(self, file_path='', name='index', type_str= "NuccChunkIndex", version=0x79):
+        super().__init__(file_path, name, type_str)
         self.has_props = True
 
 
 class NuccChunkTexture(NuccChunk):
-    def __init__(self, file_path, name, version=0x79):
-        super().__init__(file_path, name)
+    def __init__(self, file_path, name, type_str= "NuccChunkTexture", version=0x79):
+        super().__init__(file_path, name, type_str)
 
         # Set these to None in case a texture is a reference only and isn't contained in the xfbin
         self.data = self.nut = None
@@ -337,15 +340,15 @@ class CoordNode:
         self.rotation = (0.0,) * 3
         self.scale = (1.0,) * 3
         self.matrix = None
-        self.unkFloat = 1.0
-        self.unkShort = 0
+        self.opacity = 1.0
+        self.flags = 0
 
     def init_data(self, coord: BrNuccChunkCoord):
         self.position = coord.position
         self.rotation = coord.rotation
         self.scale = coord.scale
-        self.unkFloat = coord.unkFloat
-        self.unkShort = coord.unkShort
+        self.opacity = coord.opacity
+        self.flags = coord.flags
 
     def get_children_recursive(self) -> List['CoordNode']:
         result = list()
@@ -361,8 +364,8 @@ class CoordNode:
         self.position = other.position
         self.rotation = other.rotation
         self.scale = other.scale
-        self.unkFloat = other.unkFloat
-        self.unkShort = other.unkShort
+        self.opacity = other.opacity
+        self.flags = other.flags
 
 
 class NuccChunkModel(NuccChunk):
@@ -445,8 +448,8 @@ class RiggingFlag(IntFlag):
 
 
 class NuccChunkMaterial(NuccChunk):
-    def __init__(self, file_path, name):
-        super().__init__(file_path, name)
+    def __init__(self, file_path, name, type_str= "NuccChunkMaterial"):
+        super().__init__(file_path, name, type_str)
         self.alpha = 0
         self.glare = 0
         self.flags = 0
@@ -635,8 +638,8 @@ class NuccChunkAnm(NuccChunk):
                 continue
             
             p: BrAnmCoordParent
-            parent = self.clumps[p.parent_clump_index].bones[p.parent_coord_index]
-            child = self.clumps[p.child_clump_index].bones[p.child_coord_index]
+            parent = self.clumps[p.parent_clump_index].children[p.parent_coord_index]
+            child = self.clumps[p.child_clump_index].children[p.child_coord_index]
             child.parent = parent
             parent.children.append(child)
 

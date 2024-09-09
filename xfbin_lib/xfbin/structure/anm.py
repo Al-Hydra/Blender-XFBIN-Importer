@@ -4,17 +4,18 @@ from typing import List, Optional, Union
 from .br.br_anm import *
 
 
-class AnmBone:
+class AnmClumpChild:
     name: str
     chunk: 'NuccChunk'
 
-    parent: 'AnmBone'
-    children: List['AnmBone']
+    parent: 'AnmClumpChild'
+    children: List['AnmClumpChild']
 
     anm_entry: 'AnmEntry'
 
     def __init__(self):
         self.name = ''
+        self.type = ""
         self.chunk = None
         self.parent = None
         self.children = list()
@@ -27,7 +28,7 @@ class AnmModel:
 
 
 class AnmClump:
-    bones: List[AnmBone]
+    bones: List[AnmClumpChild]
     models: List[AnmModel]
 
     def init_data(self, br_anm_clump: BrAnmClump, chunk_refs: List['ChunkReference']):
@@ -36,12 +37,13 @@ class AnmClump:
         self.name = clump_ref.chunk.name
         self.chunk = clump_ref.chunk
 
-        self.bones = list()
-        for bone_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.bones)):
-            bone = AnmBone()
-            bone.name = bone_ref.name
-            bone.chunk = bone_ref.chunk
-            self.bones.append(bone)
+        self.children = list()
+        for child_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.bones)):
+            child = AnmClumpChild()
+            child.name = child_ref.name
+            child.type = child_ref.chunk.type
+            child.chunk = child_ref.chunk
+            self.children.append(child)
 
         self.models = list()
         for model_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.models)):
@@ -84,17 +86,18 @@ class AnmEntry:
     chunk: 'NuccChunk'
 
     clump: Optional[AnmClump]
-    bone: Optional[AnmBone]
+    bone: Optional[AnmClumpChild]
 
     def init_data(self, br_anm_entry: BrAnmEntry, frame_size: int, clumps: List[AnmClump], other_entry_chunks: List['NuccChunk']):
         if br_anm_entry.clump_index != -1:
             self.clump: AnmClump = clumps[br_anm_entry.clump_index]
 
             # Set up this entry's name and chunk, and set the bone's entry
-            self.bone = self.clump.bones[br_anm_entry.bone_index]
-            self.bone.anm_entry = self
-            self.name = self.bone.name
-            self.chunk = self.bone.chunk
+            self.child = self.clump.children[br_anm_entry.bone_index]
+            self.child.anm_entry = self
+            self.name = self.child.name
+            self.chunk = self.child.chunk
+            self.type = self.child.type
         else:
             self.clump = None
 
@@ -102,6 +105,7 @@ class AnmEntry:
             self.bone = None
             self.name = chunk.name
             self.chunk = chunk
+            self.type = chunk.type
 
         self.entry_format = br_anm_entry.entry_format
 

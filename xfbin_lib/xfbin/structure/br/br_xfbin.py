@@ -331,8 +331,7 @@ class BrPage(BrStruct):
             br_chunk: BrChunk = br.read_struct(BrChunk)
 
             # Convert the BrChunk to a BrNuccChunk
-            chunk = br_xfbin.chunkTable.get_br_nucc_chunk(
-                br_chunk, br_xfbin.curPageStart)
+            chunk = br_xfbin.chunkTable.get_br_nucc_chunk(br_chunk, br_xfbin.curPageStart)
 
             # Add the BrNuccChunk to the dictionary by its local map index (for use when converting BrNuccChunks to NuccChunks)
             self.chunksDict[br_chunk.chunkMapIndex] = chunk

@@ -481,14 +481,18 @@ class XfbinExporter:
             node.scale = sca[:]
 
             # Set the unknown values if they were imported
-            unk_float = bone.get('unk_float')
-            unk_short = bone.get('unk_short')
+            opacity = bone.get('opacity')
+            flags = bone.get('flags')
 
             
-            if unk_float is not None:
-                node.unkFloat = unk_float
-            if unk_short is not None:
-                node.unkShort = unk_short
+            if opacity is not None:
+                node.opacity = opacity
+            else:
+                node.opacity = 1.0
+            if flags is not None:
+                node.flags = flags
+            else:
+                node.flags = 0
             
             # Add the coord chunk to the list
             coords.append(coord)
@@ -521,14 +525,18 @@ class XfbinExporter:
                 node.scale = sca[:]
 
             # Set the unknown values if they were imported
-            unk_float = bone.get('unk_float')
-            unk_short = bone.get('unk_short')
+            opacity = bone.get('opacity')
+            flags = bone.get('flags')
 
             
-            if unk_float is not None:
-                node.unkFloat = unk_float
-            if unk_short is not None:
-                node.unkShort = unk_short
+            if opacity is not None:
+                node.opacity = opacity
+            else:
+                node.opacity = 1.0
+            if flags is not None:
+                node.flags = flags
+            else:
+                node.flags = 0
             
 
             # Add the coord chunk to the list

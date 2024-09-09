@@ -495,6 +495,7 @@ def _01_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F008'):
 	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
 
 	shader_node.inputs['falloff'].default_value = mat_data.fallOff
+	shader_node.inputs["Glare Strength"].default_value = 1 + mat_data.glare
 
 	#set shadows culling
 	material.use_backface_culling_shadow = True
@@ -690,6 +691,88 @@ def _05_F00D(self, mesh, xfbin_mat, mesh_flags):
 	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
 	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
 
+	#set shadows culling
+	material.use_backface_culling_shadow = True
+	
+	return material
+
+
+def _07_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F002'):
+	
+	bpy.context.scene.view_settings.view_transform = 'Standard'
+
+	material = bpy.data.materials.get(f'{shader_name}_Material')
+	if not material:
+		material_path = f'{path}/7F002.blend'
+		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
+			data_to.materials = [f'{shader_name}_Material']
+		material = data_to.materials[0]
+
+	material = material.copy()
+	material.name = xfbin_mat.name
+	
+	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+
+	#check if pointLightPos0 object exists
+	pointLightPos0 = bpy.data.objects.get('pointLightPos0')
+
+	if pointLightPos0:
+		#make sure it's linked to the scene
+		if pointLightPos0.users_scene:
+			pass
+		else:
+			bpy.context.collection.objects.link(pointLightPos0)
+	else:
+		#create a point lamp
+		pointLightPos0 = bpy.data.lights.new(name='pointLightPos0', type='POINT')
+		pointLightPos0.energy = 1
+
+		#create an object for the lamp
+		pointLightPos0_obj = bpy.data.objects.new('pointLightPos0', pointLightPos0)
+		pointLightPos0_obj.location = (0, 0, 0)
+
+		#link the lamp to the scene
+		bpy.context.collection.objects.link(pointLightPos0_obj)
+	
+	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
+	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
+	texture2: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[1]
+
+
+	#find Tex1 node
+	tex1_node = material.node_tree.nodes.get('Tex1')
+	tex1_node.image = bpy.data.images.get(f"{texture.name}_0")
+
+	#set texture wrap mode
+	if texture.wrapModeS == '3':
+		tex1_node.extension = 'EXTEND'
+	
+	if not tex1_node.image:
+		tex1_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
+	
+	tex2_node = material.node_tree.nodes.get('Tex2')
+	tex2_node.image = bpy.data.images.get(f"{texture2.name}_0")
+	if not tex2_node.image:
+		tex2_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
+	
+	
+	#find the shader node
+	shader_node = material.node_tree.nodes.get('7F002')
+
+	#set uvOffset and uvScale
+	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
+	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
+	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
+	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
+
+	#set uvOffset and uvScale
+	shader_node.inputs['uvOffset1 Offset X'].default_value = mat_data.uvOffset1[0]
+	shader_node.inputs['uvOffset1 Offset Y'].default_value = mat_data.uvOffset1[1]
+	shader_node.inputs['uvOffset1 Scale X'].default_value = mat_data.uvOffset1[2]
+	shader_node.inputs['uvOffset1 Scale Y'].default_value = mat_data.uvOffset1[3]
+
+	shader_node.inputs['blendRate Tex1'].default_value = mat_data.blendRate[0]
+	shader_node.inputs['blendRate Tex2'].default_value = mat_data.blendRate[1]
 	#set shadows culling
 	material.use_backface_culling_shadow = True
 	
@@ -1071,134 +1154,6 @@ def _07_F00D(self, meshmat, xfbin_mat, matname, mesh, nodegrp = '07F00D'):
 		tex2.image = bpy.data.images.get(image_name2)
 		image_name3 = f'{xfbin_mat.texture_groups[0].texture_chunks[2].name}_0'
 		tex3.image = bpy.data.images.get(image_name3)
-		if not tex1.image:
-			#load error64x64.dds
-			if bpy.data.images.get('error64x64.dds'):
-				tex1.image = bpy.data.images.get('error64x64.dds')
-			else:
-				tex1.image = bpy.data.images.load(f'{path}/error64x64.dds')
-
-	return material
-
-
-def _07_F002(self, meshmat,  xfbin_mat, matname, mesh, nodegrp = '07F002'):
-
-	bpy.context.scene.view_settings.view_transform = 'Standard'
-
-	material = bpy.data.materials.new(matname)
-	material.use_nodes = True
-	# Alpha Mode
-	if meshmat.sourceFactor == 2:
-		material.blend_method = 'CLIP'
-	elif meshmat.sourceFactor == 1 or meshmat.sourceFactor == 5:
-		material.blend_method = 'BLEND'
-	material.shadow_method = 'NONE'
-	
-	# Culling Mode
-	if meshmat.cullMode == 1028 or meshmat.cullMode == 1029:
-		material.use_backface_culling = True
-	else:
-		material.use_backface_culling = False
-
-	#Remove Unnecessary nodes
-	material.node_tree.nodes.clear()
-
-	#remove node groups with the same name to prevent issues with min and max values of some nodes
-	if bpy.data.node_groups.get(nodegrp):
-		bpy.data.node_groups.remove(bpy.data.node_groups.get(nodegrp))
-
-	#Create a new node tree to be used later
-	nodetree = bpy.data.node_groups.new(nodegrp, 'ShaderNodeTree')
-
-	#Create a node group to organize nodes and inputs
-	nodegroup = material.node_tree.nodes.new('ShaderNodeGroup')
-	nodegroup.name = nodegrp
-	nodegroup.location = (721, 611)
-	#use the node tree we made earlier for our node group
-	nodegroup.node_tree = nodetree
-
-	#Nodes
-
-	multiply1 = nodegroup.node_tree.nodes.new('ShaderNodeMixRGB')
-	multiply1.location = (256, 131)
-	multiply1.blend_type = 'MULTIPLY'
-	multiply1.inputs[0].default_value = 1
-
-	multiply2 = nodegroup.node_tree.nodes.new('ShaderNodeMixRGB')
-	multiply2.location = (256, 131)
-	multiply2.blend_type = 'MULTIPLY'
-	multiply2.inputs[0].default_value = 1
-
-
-	transparent = nodegroup.node_tree.nodes.new('ShaderNodeBsdfTransparent')
-	transparent.location = (264, -261)
-
-	mix_shader = nodegroup.node_tree.nodes.new('ShaderNodeMixShader')
-	mix_shader.location = (696, -113)
-
-	group_input = nodegroup.node_tree.nodes.new('NodeGroupInput')
-	group_input.location = (-56, -112)
-	nodegroup.node_tree.inputs.new('NodeSocketColor','Diffuse Texture')
-	nodegroup.node_tree.inputs.new('NodeSocketColor','Shadow Texture')
-	nodegroup.node_tree.inputs.new('NodeSocketColor','Alpha')
-	nodegroup.node_tree.inputs.new('NodeSocketColor','Tweak Colors')
-	material.node_tree.nodes[nodegrp].inputs['Tweak Colors'].default_value = (1,1,1,1)
-
-	group_output = nodegroup.node_tree.nodes.new('NodeGroupOutput')
-	group_output.location = (886, 4)
-	nodegroup.node_tree.outputs.new('NodeSocketShader','Out')
-
-	uv1 = material.node_tree.nodes.new('ShaderNodeUVMap')
-	uv1.location = (-84, -552)
-	uv1.uv_map = 'UV_0'
-
-	tex1 = material.node_tree.nodes.new('ShaderNodeTexImage')
-	tex1.location = (174, 720)
-	tex1.name = 'Diffuse'
-
-	uv2 = material.node_tree.nodes.new('ShaderNodeUVMap')
-	uv2.location = (-84, -552)
-	uv2.uv_map = 'UV_1'
-
-	tex2 = material.node_tree.nodes.new('ShaderNodeTexImage')
-	tex2.location = (174, 720)
-	tex2.name = 'Diffuse'
-
-
-	output = material.node_tree.nodes.new('ShaderNodeOutputMaterial')
-	output.location = (1091, 520)
-
-	#Link nodes
-	nodegroup.node_tree.links.new(transparent.outputs[0], mix_shader.inputs[1])
-
-	nodegroup.node_tree.links.new(mix_shader.outputs[0], group_output.inputs[0])
-
-	nodegroup.node_tree.links.new(group_input.outputs[0], multiply1.inputs[1])
-
-	nodegroup.node_tree.links.new(group_input.outputs[1], multiply1.inputs[2])
-
-	nodegroup.node_tree.links.new(group_input.outputs[2], mix_shader.inputs[0])
-
-	nodegroup.node_tree.links.new(group_input.outputs[3], multiply2.inputs[2])
-
-	nodegroup.node_tree.links.new(multiply1.outputs[0], multiply2.inputs[1])
-
-	nodegroup.node_tree.links.new(multiply2.outputs[0], mix_shader.inputs[2])
-
-	material.node_tree.links.new(uv1.outputs[0], tex1.inputs[0])
-	material.node_tree.links.new(tex1.outputs[0], nodegroup.inputs[0])
-	material.node_tree.links.new(tex1.outputs[1], nodegroup.inputs[2])
-
-	material.node_tree.links.new(uv2.outputs[0], tex2.inputs[0])
-	material.node_tree.links.new(tex2.outputs[0], nodegroup.inputs[1])
-
-	material.node_tree.links.new(nodegroup.outputs[0], output.inputs[0])
-
-	if xfbin_mat.texture_groups and xfbin_mat.texture_groups[0].texture_chunks:
-		image_name = f'{xfbin_mat.texture_groups[0].texture_chunks[0].name}_0'
-		tex1.image = bpy.data.images.get(image_name)
-		image_name = xfbin_mat.texture_groups[0].texture_chunks[1].name
-		tex2.image = bpy.data.images.get(image_name)
 		if not tex1.image:
 			#load error64x64.dds
 			if bpy.data.images.get('error64x64.dds'):
@@ -2683,6 +2638,7 @@ shaders_dict = {'00 00 F0 00': F00A,
 				"00 20 F0 00": _20_F000,
 				'00 01 F0 0F': _01_F00F,
 				'00 03 F0 0F': _03_F00F,
+				'00 07 F0 02': _07_F002,
 				'00 07 F0 06': _07_F006,
 				'00 07 F0 0B': _07_F00B,
 				'00 00 E0 02': E002,
