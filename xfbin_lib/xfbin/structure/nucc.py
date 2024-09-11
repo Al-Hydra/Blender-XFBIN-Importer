@@ -19,7 +19,7 @@ class NuccChunk:
 
     chunks: List['NuccChunk']
 
-    def __init__(self, file_path, name, type_str):
+    def __init__(self, file_path, name, type_str = "NuccChunk"):
         self.extension = ''
         self.filePath = file_path
         self.name = name
