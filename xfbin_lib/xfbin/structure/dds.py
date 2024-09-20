@@ -74,7 +74,7 @@ nut_bpp = {
 }
 
 def read_dds(dds_bytes, b = False):
-    br = BinaryReader(dds_bytes, endianness= Endian.LITTLE)
+    br = BinaryReader(dds_bytes, endianness= Endian.LITTLE, encoding="cp932")
     dds = br.read_struct(BrDDS)
     if b:
         return bytes(br.buffer())

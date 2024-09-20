@@ -180,6 +180,8 @@ class NuccChunkDynamics(NuccChunk):
 
 
 class Dynamics1:
+    def __init__(self) -> None:
+        self.name = ''
     def init_data(self, sec1: BrDynamics1, sec1_shorts: Iterator):
         self.Bounciness = sec1.Bounciness
         self.Elasticity = sec1.Elasticity

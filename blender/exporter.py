@@ -697,7 +697,7 @@ class XfbinExporter:
                 color_layer = mesh.vertex_colors.new(name='Color', type = "BYTE_COLOR", domain = "CORNER")
                 color_layer = mesh.color_attributes[0].data
 
-            #try to get the first 4 color layers
+            #try to get the first 4 uv layers
             uv_layers = list()
 
             for i, uv_layer in enumerate(mesh.uv_layers):
@@ -706,7 +706,9 @@ class XfbinExporter:
                     break
 
            # create a list for each material
-            mat_meshes = [list() for mat in mesh.materials]
+           # mat_meshes = [list() for mat in mesh.materials]
+
+            mat_meshes = {mat.name: list() for mat in mesh.materials}
 
             for tri_loops in mesh.loop_triangles:
                 tri_loops: MeshLoopTriangle
@@ -714,9 +716,9 @@ class XfbinExporter:
                 #get the material index
                 mat_index = tri_loops.material_index
 
-                mat_meshes[mat_index].append(tri_loops)
+                mat_meshes[mesh.materials[mat_index].name].append(tri_loops)
             
-            for i, mesh in enumerate(mat_meshes):
+            for mat_name, mesh in mat_meshes.items():
 
                 faces = [None] * len(mesh)
                 face_index = 0
@@ -828,12 +830,12 @@ class XfbinExporter:
                         {'WARNING'}, f'[NUD MESH] {obj.name} has no material and will be skipped.')
                     continue
                 else:
-                    mat = self.make_xfbin_material(obj.data.materials[i], clump, context)
+                    mat = self.make_xfbin_material(obj.data.materials[mat_name], clump, context)
                 
                 chunk.material_chunks.append(mat)
 
                 # Get the material properties of this mesh
-                mat_mesh.materials = self.make_nud_materials(obj, obj.data.materials[i], clump, context)
+                mat_mesh.materials = self.make_nud_materials(obj, obj.data.materials[mat_name], clump, context)
 
                 # Only add the mesh if it doesn't exceed the vertex and face limits
                 mesh_group.meshes.append(mat_mesh)
@@ -1239,24 +1241,29 @@ class XfbinExporter:
         dynamics.SPGroupCount = len(dynamics_data.spring_groups)
         dynamics.ColSphereCount = len(dynamics_data.collision_spheres)
        
-        spring_group_names = []
+        #spring_group_names = []
         dynamics.SPGroup = list()
         for spring_group in dynamics_data.spring_groups:
             spring_group: SpringGroupsPropertyGroup
             d = Dynamics1()
             
+            d.name = spring_group.bone_spring   
             d.Bounciness = spring_group.dyn1
             d.Elasticity = spring_group.dyn2
             d.Stiffness = spring_group.dyn3
             d.Movement = spring_group.dyn4
             d.coord_index = armature_obj.data.bones.find(spring_group.bone_spring)
             d.BonesCount = len(armature_obj.data.bones[spring_group.bone_spring].children_recursive) + 1
-            d.shorts = [0] * d.BonesCount
+            if spring_group.maintain_shape:
+                d.shorts = [2] * d.BonesCount
+            else:
+                d.shorts = [0] * d.BonesCount
             
             dynamics.SPGroup.append(d)
-            spring_group_names.append(spring_group.bone_spring)
+            #spring_group_names.append(spring_group.bone_spring)
         
         dynamics.SPGroup = sorted(dynamics.SPGroup, key=lambda x: x.coord_index)
+        spring_group_names = [x.name for x in dynamics.SPGroup]
         
         dynamics.ColSphere = list()
         for col in dynamics_data.collision_spheres:
@@ -1269,7 +1276,7 @@ class XfbinExporter:
             c.scale_x = col.scale_x
             c.scale_y = col.scale_y
             c.scale_z = col.scale_z
-            c.coord_index = col.bone_index
+            c.coord_index = armature_obj.data.bones.find(col.bone_collision)
 
             c.attach_groups = int(col.attach_groups)
 
@@ -1277,7 +1284,7 @@ class XfbinExporter:
             
             c.attached_groups_count = col.attached_count
 
-            c.attached_groups = [spring_group_names.index(group.bone_spring) for group in col.attached_groups if group.bone_spring in spring_group_names]
+            c.attached_groups = [spring_group_names.index(x.bone_spring) for x in col.attached_groups]
 
             dynamics.ColSphere.append(c)
 

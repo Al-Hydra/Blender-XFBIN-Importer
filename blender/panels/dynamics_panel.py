@@ -83,6 +83,9 @@ class XFBIN_SpringGroup_OT_Copy(bpy.types.Operator):
     def execute(self, context):
         data: DynamicsPropertyGroup = context.object.xfbin_dynamics_data
         bpy.context.scene.xfbin_dynamics_clipboard.copy_spring_group(data.spring_groups[data.sg_index])
+        #set the index to the last item in the list
+        data.sg_index = len(data.spring_groups) - 1
+
         return {'FINISHED'}
 
 
@@ -169,6 +172,9 @@ class XFBIN_CollisionGroup_OT_Copy(bpy.types.Operator):
     def execute(self, context):
         data: DynamicsPropertyGroup = context.object.xfbin_dynamics_data
         bpy.context.scene.xfbin_dynamics_clipboard.copy_collision_group(data.collision_spheres[data.cs_index])
+        #set the index to the last item in the list
+        data.cs_index = len(data.collision_spheres) - 1
+
         return {'FINISHED'}
     
 class XFBIN_CollisionGroup_OT_Paste(bpy.types.Operator):
@@ -285,6 +291,10 @@ class SpringGroupsPropertyGroup(PropertyGroup):
         name= 'Spring Group Index'
     )
 
+    maintain_shape: BoolProperty(
+        name='Maintain Shape',
+    )
+
     init_done: BoolProperty(
         default= True
     )
@@ -306,6 +316,8 @@ class SpringGroupsPropertyGroup(PropertyGroup):
         for flag in sgroup.shorts:
             f = self.flags.add()
             f.value = flag
+            if flag & 2:
+                self.maintain_shape = True
 class CollisionSpheresPropertyGroup(PropertyGroup):
 
     def update_count(self, context):
@@ -328,7 +340,13 @@ class CollisionSpheresPropertyGroup(PropertyGroup):
         for obj in bpy.data.objects:
             if obj.type == 'ARMATURE' and obj.xfbin_clump_data.path == context.object.xfbin_dynamics_data.path:
                 armature_obj = obj
-        col_count = len(context.object.xfbin_dynamics_data.collision_spheres)
+        #col_count = len(context.object.xfbin_dynamics_data.collision_spheres)
+
+        #find the group index
+        col_count = 0
+        for i, c in enumerate(context.object.xfbin_dynamics_data.collision_spheres):
+            if c.name == self.name:
+                col_count = i + 1
         if armature_obj != '':
             for i, b in enumerate(armature_obj.data.bones):
                 if b.name == self.bone_collision:
@@ -461,6 +479,10 @@ class DynamicsPropertyGroup(PropertyGroup):
     name: StringProperty(
     )
 
+    use_constraints: BoolProperty(
+        name='Use Constraints',
+        default= False
+    )
 
     def bonename(self, index, clump):
         return bpy.data.objects[f'{clump}'].data.bones[index].name
@@ -555,6 +577,7 @@ class DynamicsPropertyPanel(Panel):
             row.prop(spring_groups, 'dyn2')
             row.prop(spring_groups, 'dyn3')
             row.prop(spring_groups, 'dyn4')
+            row.prop(spring_groups, 'maintain_shape')
             #matrix_prop_group(box, spring_groups, 'flags', spring_groups.bone_count, 'Bone Flags')
 
         
@@ -579,6 +602,7 @@ class DynamicsPropertyPanel(Panel):
             box = layout.box()
             row = box.row()
             row.operator(CollisionsLiveEdit.bl_idname)
+            row.prop(data, 'use_constraints')
             row = box.row()
             row.prop(collision_spheres, 'offset_x')
             row.prop(collision_spheres, 'offset_y')
@@ -613,6 +637,11 @@ class XfbinDynamicsClipboardPropertyGroup(PropertyGroup):
     def copy_spring_group(self, spring_group: SpringGroupsPropertyGroup):
         for k,v in spring_group.items():
             self.spring_groups_clipboard[k] = v
+    
+    def copy_collision_group(self, collision_group: CollisionSpheresPropertyGroup):
+        for k,v in collision_group.items():
+            self.collision_spheres_clipboard[k] = v
+    
     
 
 class XFBIN_OT_AddBoneToSpringGroup(bpy.types.Operator):
@@ -905,8 +934,9 @@ class CollisionsLiveEdit(bpy.types.Operator):
         return context.mode == "POSE" and context.object.type == "ARMATURE"
         
     def execute(self, context):
-        spring_groups = context.object.xfbin_dynamics_data.spring_groups
-        collision_spheres = context.object.xfbin_dynamics_data.collision_spheres
+        dynamics_data: DynamicsPropertyGroup = context.object.xfbin_dynamics_data
+        spring_groups = dynamics_data.spring_groups
+        collision_spheres = dynamics_data.collision_spheres
         self.main_armature = context.object
 
         #get the parent collection
@@ -919,7 +949,11 @@ class CollisionsLiveEdit(bpy.types.Operator):
             bmesh.ops.create_icosphere(bm, subdivisions = 2, radius= 1)
             bm.to_mesh(mesh)
             bm.free()
-            sphere = bpy.data.objects.new('XFBIN Collision Sphere', mesh)
+        else:
+            mesh = bpy.data.meshes['XFBIN Collision Sphere']
+        
+        if 'XFBIN Collision Sphere' not in bpy.data.objects:
+            sphere = bpy.data.objects.new('XFBIN Collision Sphere', mesh)        
 
         #check if a skeleton for dynamics exists
         self.dyn_armature = xfbin_collection.get(f'{context.object.name}_Dynamics')
@@ -989,19 +1023,29 @@ class CollisionsLiveEdit(bpy.types.Operator):
                 copy_transforms.subtarget = col.bone_collision
                 copy_transforms.mix_mode = 'BEFORE'
 
-                '''if col.attach_groups:
+                if col.attach_groups and dynamics_data.use_constraints:
                     for sg in col.attached_groups:
                         if sg.bone_spring in spring_groups:
                             sg: SpringGroupsPropertyGroup
                             #get the last child in the spring group
-                            last_child = main_armature.pose.bones[sg.bone_spring].children_recursive[-1]
+                            last_child = self.main_armature.pose.bones[sg.bone_spring].children_recursive[-1]
 
-                            #set IK constraint
-                            ik = last_child.constraints.new('IK')
-                            ik.name = f'{col.name} IK'
+                            #clear constraints
+                            '''for c in last_child.constraints:
+                                last_child.constraints.remove(c)'''
+                            
+                            #check if a constraint already exists
+                            if last_child.constraints.get(f'{col.name} IK') is None:
+
+                                #set IK constraint
+                                ik = last_child.constraints.new('IK')
+                                ik.name = f'{col.name} IK'
+                            else:
+                                ik = last_child.constraints.get(f'{col.name} IK')
+
                             ik.target = self.dyn_armature
                             ik.subtarget = bone.name
-                            ik.chain_count = len(main_armature.pose.bones[sg.bone_spring].children_recursive) + 1'''
+                            ik.chain_count = len(self.main_armature.pose.bones[sg.bone_spring].children_recursive) + 1
         
 
         self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
@@ -1055,6 +1099,11 @@ class CollisionsLiveEdit(bpy.types.Operator):
         bpy.data.objects.remove(self.dyn_armature)
         #set the main armature as the active object
         context.view_layer.objects.active = self.main_armature
+
+        #remove constraints
+        '''for bone in self.main_armature.pose.bones:
+            for c in bone.constraints:
+                bone.constraints.remove(c)'''
         return {'CANCELLED'}
 
 dynamics_chunks_property_groups = (
