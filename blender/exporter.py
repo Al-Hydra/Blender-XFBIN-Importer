@@ -902,7 +902,7 @@ class XfbinExporter:
         shaders = list()
         blender_mat = material
 
-        print(f'Exporting material {material.name} for {model.name}')
+        #print(f'Exporting material {material.name} for {model.name}')
 
         def set_shader_props(shader, shader_settings):
             shader.sourceFactor = shader_settings.source_factor
@@ -1020,6 +1020,19 @@ class XfbinExporter:
                     #copy the first shader
                     for attr, value in shaders[0].__dict__.items():
                         setattr(m, attr, value)
+
+                    #set params
+                    m.properties = list()
+                    for param in shader.shader_params:
+                        param: NUD_ShaderParamPropertyGroup
+                        p = NudMaterialProperty()
+                        p.name = param.name
+
+                        p.values = list()
+                        for i in range(param.count):
+                            p.values.append(param.values[i].value)
+
+                        m.properties.append(p)
                 
                 else:
                     set_shader_props(m, shader)
@@ -1063,6 +1076,19 @@ class XfbinExporter:
                     #copy the first shader
                     for attr, value in shaders[0].__dict__.items():
                         setattr(m, attr, value)
+                    
+                    #set params
+                    m.properties = list()
+                    for param in shader.shader_params:
+                        param: NUD_ShaderParamPropertyGroup
+                        p = NudMaterialProperty()
+                        p.name = param.name
+
+                        p.values = list()
+                        for i in range(param.count):
+                            p.values.append(param.values[i].value)
+
+                        m.properties.append(p)
                 
                 else:
                     set_shader_props(m, shader)

@@ -31,11 +31,23 @@ class AnmClump:
     bones: List[AnmClumpChild]
     models: List[AnmModel]
 
-    def init_data(self, br_anm_clump: BrAnmClump, chunk_refs: List['ChunkReference']):
-        clump_ref = chunk_refs[br_anm_clump.clump_index]
+    def init_data(self, br_anm_clump: BrAnmClump, chunk_refs: List['ChunkReference'], initial_page_chunks: List['NuccChunk']):
+        #if clump not in chunk_refs, then it's in initial_page_chunks
+        is_ref = True
+        if br_anm_clump.clump_index < len(chunk_refs):
+            clump_ref = chunk_refs[br_anm_clump.clump_index]
+        else:
+            clump_ref = initial_page_chunks[br_anm_clump.clump_index]
+            is_ref = False
+        #print(f"{BrAnmClump.__name__} clump_ref: {clump_ref}")
 
-        self.name = clump_ref.chunk.name
-        self.chunk = clump_ref.chunk
+        if is_ref:
+            self.name = clump_ref.chunk.name
+
+            self.chunk = clump_ref.chunk
+        else:
+            self.name = clump_ref.name
+            self.chunk = clump_ref
 
         self.children = list()
         for child_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.bones)):
@@ -156,7 +168,7 @@ def create_anm_curve(data_path: AnmDataPath, curve_format: AnmCurveFormat, curve
             curve.data_path = AnmDataPath.ROTATION_QUATERNION
             curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
 
-        elif curve_format == AnmCurveFormat.SHORT4:
+        elif curve_format == AnmCurveFormat.SHORT4 or curve_format == AnmCurveFormat.SHORT4ALT:
             curve.data_path = AnmDataPath.ROTATION_QUATERNION
             curve.keyframes = list(map(lambda i, v: AnmKeyframe(
                 frame_size * i, tuple(map(lambda x: x / 0x8000, v))), range(len(curve_values)), curve_values))
@@ -177,6 +189,13 @@ def create_anm_curve(data_path: AnmDataPath, curve_format: AnmCurveFormat, curve
         if curve_format == AnmCurveFormat.FLOAT1:
             curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
                                        range(len(curve_values)), curve_values))
+        
+        elif curve_format == AnmCurveFormat.SHORT1ALT:
+            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
+                                       range(len(curve_values)), curve_values))
+        
+        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
+            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
 
         elif curve_format == AnmCurveFormat.SHORT1:
             curve.keyframes = list(map(lambda i, v: AnmKeyframe(

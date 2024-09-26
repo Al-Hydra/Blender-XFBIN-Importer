@@ -417,7 +417,7 @@ class XFBIN_MatParam_OT_Paste(bpy.types.Operator):
 
         if len(shader.shader_params) > 0:
             newParam: NUD_ShaderParamPropertyGroup = shader.shader_params.add()
-            newParam.init_copy(clipboard.shader_param_clipboard)
+            newParam.init_data(clipboard.shader_param_clipboard)
 
             self.report({'INFO'}, f'Param ({clipboard.shader_param_clipboard.name}) from clipboard to ({obj.active_material.name})')
         
@@ -454,11 +454,13 @@ class NUD_ShaderParamPropertyGroup(PropertyGroup):
     
     def init_copy(self, param):
         self.name = param.name
-        for value in param.values:
+
+        for i in range(param.count):
             v = self.values.add()
-            v.value = value.value
+            v.value = param.values[i].value
         
         self.count = param.count
+        
 
 
 class NUD_ShaderTexPropertyGroup(PropertyGroup):
@@ -1208,7 +1210,7 @@ class XFBIN_Material_OT_Paste(bpy.types.Operator):
         mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
         clipboard = bpy.context.scene.xfbin_material_clipboard
         
-        mat.init_copy(clipboard.material_clipboard)
+        mat.init_data(clipboard.material_clipboard)
 
         self.report({'INFO'}, f"XFBIN Material ({obj.active_material.name}) pasted from clipboard")
 

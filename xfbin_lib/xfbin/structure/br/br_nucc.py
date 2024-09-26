@@ -532,7 +532,7 @@ class BrNuccChunkCoord(BrNuccChunk):
         if self.version > 0x66:
             self.flags = br.read_uint16()  # Not always 0
         else:
-            self.unkShort = 0
+            self.flags = 0
 
     def __br_write__(self, br: 'BinaryReader', chunkIndexDict: IterativeDict):
         node = self.nuccChunk.node
@@ -660,7 +660,11 @@ class BrNuccChunkAnm(BrNuccChunk):
         super().init_data(br)
 
         self.frame_count = br.read_uint32()
-        self.frame_size = br.read_uint32()  # Usually 100 (0x64)
+        if self.version > 101:
+            self.frame_size = br.read_uint32()  # Usually 100 (0x64)
+        else:
+            self.frame_size = 100
+
 
         self.entry_count = br.read_uint16()
         self.loop_flag = br.read_uint16() # Whether the animation is looped
@@ -675,6 +679,7 @@ class BrNuccChunkAnm(BrNuccChunk):
         self.coord_parents = br.read_struct(BrAnmCoordParent, self.coord_count)
 
         self.entries = br.read_struct(BrAnmEntry, self.entry_count)
+
     
     def __br_write__(self, br: 'BinaryReader', chunkIndexDict: IterativeDict):
         br.write_uint32(self.nuccChunk.frame_count * 100)
