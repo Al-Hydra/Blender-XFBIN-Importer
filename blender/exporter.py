@@ -646,7 +646,10 @@ class XfbinExporter:
             obj_parent_type = obj.parent_type
 
             #bounding box and bounding sphere calculations
-            bbox_corners = [mesh_bone.matrix_local.inverted() @ Vector(corner) for corner in obj.bound_box]
+            if mesh_bone:
+                bbox_corners = [mesh_bone.matrix_local.inverted() @ Vector(corner) for corner in obj.bound_box]
+            else:
+                bbox_corners = [Vector(corner) for corner in obj.bound_box]
 
             bbox_corners_world = [obj.matrix_world @ corner for corner in bbox_corners]
 
