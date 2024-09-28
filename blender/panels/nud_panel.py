@@ -179,7 +179,7 @@ class NudPropertyPanel(Panel):
 
         draw_copy_paste_ops(layout, 'xfbin_nud_data', 'NUD Properties')
 
-        collection = bpy.data.collections[obj.users_collection[0].name]
+        collection = obj.users_collection[0]
         row = layout.row()
 
         row.prop_search(data, 'mesh_bone', obj.parent.data, 'bones')

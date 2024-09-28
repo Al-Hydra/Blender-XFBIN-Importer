@@ -496,10 +496,6 @@ class DynamicsPropertyGroup(PropertyGroup):
         self.sg_count = dynamics.SPGroupCount
         self.cs_count = dynamics.ColSphereCount
         
-        indices = []
-        for g in dynamics.SPGroup:
-            indices.append(g.coord_index)
-
         # Add spring groups
         self.spring_groups.clear()
         for sgroup in dynamics.SPGroup:
@@ -509,6 +505,7 @@ class DynamicsPropertyGroup(PropertyGroup):
             s.bone_spring = s.name = context.object.data.bones[sgroup.coord_index].name
             s.init_done = True
 
+        sorted_spring_groups = sorted(self.spring_groups, key= lambda x: x.bone_index)
         # Add collision groups
         self.collision_spheres.clear()
         for i, colsphere in enumerate(dynamics.ColSphere):
@@ -521,7 +518,7 @@ class DynamicsPropertyGroup(PropertyGroup):
                 c.attach_groups = True
                 for index in colsphere.attached_groups:
                     g = c.attached_groups.add()
-                    g.bone_spring = self.spring_groups[index].name
+                    g.bone_spring = sorted_spring_groups[index].name
             c.init_done = True
         
         
