@@ -174,7 +174,7 @@ class Xfbin:
             self.pages.pop(index)
 
         # Add the unique model chunks
-        for model in list(dict.fromkeys(chain(clump.model_chunks, *clump.model_groups))):
+        for model in clump.model_chunks:
             # Clump model groups can have None references, so skip those
             if model:
                 if isinstance(model.hit_chunk, NuccChunkModelHit):

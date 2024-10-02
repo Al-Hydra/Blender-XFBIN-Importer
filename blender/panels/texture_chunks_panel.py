@@ -214,7 +214,8 @@ class NutTexturePropertyGroup(PropertyGroup):
         self.name = tex_name
         self.width = str(nut_texture.width)
         self.height = str(nut_texture.height)
-        self.pixel_format = Pixel_Formats[nut_texture.pixel_format]
+        pixel_format = Pixel_Formats.get(nut_texture.pixel_format)
+        self.pixel_format = Pixel_Formats.get(nut_texture.pixel_format) if pixel_format else 'UNSUPPORTED'
         self.mipmap_count = nut_texture.mipmap_count
         self.is_cubemap = nut_texture.is_cube_map
 
@@ -224,7 +225,10 @@ class NutTexturePropertyGroup(PropertyGroup):
             self.cubemap_faces = nut_texture.cubemap_faces
 
         #convert Nut Texture to DDS
-        self.texture_data = dds.NutTexture_to_DDS(nut_texture)
+        if pixel_format:
+            self.texture_data = dds.NutTexture_to_DDS(nut_texture)
+        else:
+            self.texture_data = b""
 
 
         if bpy.data.images.get(self.name):

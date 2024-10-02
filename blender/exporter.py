@@ -422,9 +422,9 @@ class XfbinExporter:
             #clump.model_chunks = [model_chunks[c.value] for c in clump_data.models if c.value in model_chunks]
             lod_list = ["lod1", "lod2", "LOD1", "LOD2"]
             if clump.coord_flag0 > 1:
-                clump.model_chunks = [model_chunks[c.value] for c in clump_data.models if c.value in model_chunks and not any(lod in c.value for lod in lod_list)]
+                clump.model_chunks = [model.value for model in model_chunks if not any(lod in model for lod in lod_list)]
             else:
-                clump.model_chunks = [model_chunks[c.value] for c in clump_data.models if c.value in model_chunks]
+                clump.model_chunks = [model for model in model_chunks.values()]
 
             # Add a None reference for model groups that might use it
             # Hopefully no actual models have that name...
