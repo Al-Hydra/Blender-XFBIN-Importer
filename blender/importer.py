@@ -13,6 +13,9 @@ from mathutils import Matrix, Quaternion, Vector, Euler
 from ..xfbin_lib.xfbin.structure.anm import (AnmDataPath, AnmEntry,
                                              AnmEntryFormat)
 from ..xfbin_lib.xfbin.structure.nucc import (CoordNode, NuccChunkAnm, NuccChunkCamera,
+                                              NuccChunkLightDirc,
+                                              NuccChunkLightPoint,
+                                              NuccChunkAmbient,
                                               NuccChunkDynamics,
                                               NuccChunkClump, NuccChunkModel,
                                               NuccChunkModelHit,
@@ -258,6 +261,10 @@ class XfbinImporter:
         dynamics_chunks = {}
         anm_chunks: List[NuccChunkAnm] = list()
         cam_chunks: List[NuccChunkCamera] = list()
+        lightdirc_chunks: List[NuccChunkLightDirc] = list()
+        lightpoint_chunks: List[NuccChunkLightPoint] = list()
+        ambient_chunks: List[NuccChunkLightPoint] = list()
+
 
         if self.clear_textures:
             bpy.context.scene.xfbin_texture_chunks_data.clear()
@@ -274,6 +281,12 @@ class XfbinImporter:
                     anm_chunks.append(chunk)
                 elif isinstance(chunk, NuccChunkCamera):
                     cam_chunks.append(chunk)
+                elif isinstance(chunk, NuccChunkLightDirc):
+                    lightdirc_chunks.append(chunk)
+                elif isinstance(chunk, NuccChunkLightPoint):
+                    lightpoint_chunks.append(chunk)
+                elif isinstance(chunk, NuccChunkAmbient):
+                    ambient_chunks.append(chunk)
                 elif isinstance(chunk, NuccChunkDynamics):
                     dynamics_chunks.update({chunk.name: chunk})
 
@@ -316,10 +329,12 @@ class XfbinImporter:
         empty_anm.empty_display_size = 0
 
         self.collection.objects.link(empty_anm)
-        empty_anm.xfbin_anm_chunks_data.init_data(anm_chunks, cam_chunks, context)
+
+        empty_anm.xfbin_anm_chunks_data.init_data(anm_chunks, cam_chunks, lightdirc_chunks, lightpoint_chunks, ambient_chunks, context)
+
         for anm in anm_chunks: # Create camera objects for each anm that has a camera chunk
             for cam in cam_chunks:
-                if anm.filePath != cam.filePath: # If cam and anm have same filepath they're in the same page
+                if anm.filePath != cam.filePath:
                     continue
                 
                 anm: NuccChunkAnm
@@ -334,8 +349,68 @@ class XfbinImporter:
                 camera.animation_data_create()
                 camera.animation_data.action = bpy.data.actions.get(f"{anm.name} (camera)")
                 
+                # Link the camera to the collection and to animation empty
                 self.collection.objects.link(camera)
+                camera.parent = empty_anm
+            
+            for lightdirc in lightdirc_chunks:
+                if anm.filePath != lightdirc.filePath:
+                    continue
 
+                anm: NuccChunkAnm
+                lightdirc: NuccChunkLightDirc
+
+                lightdirc_data = bpy.data.lights.new(f"{lightdirc.name} ({anm.name})", 'SUN')
+        
+                light_dirc = bpy.data.objects.new(f"{lightdirc.name} ({anm.name})", lightdirc_data)
+                light_dirc.rotation_mode = 'QUATERNION'
+                light_dirc.animation_data_create()
+                light_dirc.animation_data.action = bpy.data.actions.get(f"{anm.name} (lightdirc)")
+                
+
+                self.collection.objects.link(light_dirc)
+                light_dirc.parent = empty_anm
+            
+            for lightpoint in lightpoint_chunks:
+                if anm.filePath != lightpoint.filePath:
+                    continue
+
+                anm: NuccChunkAnm
+                lightpoint: NuccChunkLightPoint
+
+                lightpoint_data = bpy.data.lights.new(f"{lightpoint.name} ({anm.name})", 'POINT')
+                lightpoint_data.use_custom_distance = True
+        
+                light_point = bpy.data.objects.new(f"{lightpoint.name} ({anm.name})", lightpoint_data)
+                light_point.rotation_mode = 'QUATERNION'
+                light_point.animation_data_create()
+                light_point.animation_data.action = bpy.data.actions.get(f"{anm.name} (lightpoint)")
+                
+                self.collection.objects.link(light_point)
+                light_point.parent = empty_anm
+
+            for ambient in ambient_chunks:
+                if anm.filePath != ambient.filePath:
+                    continue
+
+                anm: NuccChunkAnm
+                ambient_chunk: NuccChunkAmbient
+
+
+                # Since ambient light is environment light, we need to use the World settings
+                # Therefore, we don't need to create a light object for it but a World object to the scene
+
+
+                ambient_data = bpy.data.lights.new(f"{ambient_chunk.name} ({anm.name})", 'AREA')
+
+                ambient = bpy.data.objects.new(f"{ambient_chunk.name} ({anm.name})", ambient_data)
+                ambient.animation_data_create()
+                ambient.animation_data.action = bpy.data.actions.get(f"{anm.name} (ambient)")
+
+                self.collection.objects.link(ambient)
+                ambient.parent = empty_anm
+
+              
     def make_collection(self, context) -> bpy.types.Collection:
         """
         Build a collection to hold all of the objects and meshes from the GMDScene.
@@ -863,102 +938,153 @@ class XfbinImporter:
         return bm
 
 def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
-    #print(f"-------------------{anm.name}-------------------")
+    actions: List[bpy.types.Action] = list()
+
     start_time = time.time()
 
-    actions = list()
-    
-   # try:
     for entry in anm.other_entries:
         entry: AnmEntry
 
+        # TODO: Some anm have no clumps for some reason, just skip them until we know why
+        if not len(anm.clumps):
+            continue
+
+    
         action = bpy.data.actions.new(
             f'{anm.name} ({AnmEntryFormat(entry.entry_format).name.lower()})')
         
         group_name = action.groups.new(anm.name).name
 
+        
         for curve in entry.curves:
             if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
                 continue
 
-            #frames = list(map(lambda x: frame_to_blender(x.frame), curve.keyframes))
-            frames = [frame_to_blender(x.frame) for x in curve.keyframes]
+            frames = list(
+                map(lambda x: frame_to_blender(x.frame), curve.keyframes))
             
-            #values = convert_anm_values(curve.data_path, list(map(lambda x: x.value, curve.keyframes)))
-            values = convert_anm_values(curve.data_path, [x.value for x in curve.keyframes])
+            values = convert_anm_values(curve.data_path, list(
+                map(lambda x: x.value, curve.keyframes)))
 
             if curve.data_path == AnmDataPath.CAMERA:
-                # TODO: change camera rotation mode to quaternion, and lens unit to FOV
-                # This should be done on playing the animation chunk
                 data_path = 'data.lens'
+            
+            elif curve.data_path == AnmDataPath.COLOR:
+                data_path = 'data.color'
+            
+            elif curve.data_path == AnmDataPath.ENERGY:
+                data_path = 'data.energy'
+
+            elif curve.data_path == AnmDataPath.RADIUS:
+                data_path = 'data.shadow_soft_size'
+
+            elif curve.data_path == AnmDataPath.CUTOFF:
+                data_path = 'data.cutoff_distance'
+
             else:
                 data_path = f'{AnmDataPath(curve.data_path).name.lower()}'
-
-
+            
+        
             for i in range(len(values[0])):
                 fc = action.fcurves.new(
                     data_path=data_path, index=i, action_group=group_name)
                 fc.keyframe_points.add(len(frames))
-                fc.keyframe_points.foreach_set('co', [x for co in list(map(lambda f, v: (f, v[i]), frames, values)) for x in co])
-
+                fc.keyframe_points.foreach_set('co', [x for co in list(
+                    map(lambda f, v: (f, v[i]), frames, values)) for x in co])
                 fc.update()
+            
+            if entry.entry_format == AnmEntryFormat.AMBIENT:
+                world = bpy.data.worlds["World"]
+                if not world.use_nodes:
+                    world.use_nodes = True
+
+                node_tree = world.node_tree
+
+                if "Background" not in node_tree.nodes:
+                    bg_node = node_tree.nodes.new(type='ShaderNodeBackground')
+                    bg_node.name = "Background"
+                else:
+                    bg_node = node_tree.nodes["Background"]
+                
+                if curve.data_path == AnmDataPath.COLOR:
+                    for i in range(4):  # RGBA
+                        fc = action.fcurves.new(
+                            data_path=f'node_tree.nodes["Background"].inputs[0].default_value', 
+                            index=i, 
+                            action_group=group_name
+                        )
+                        fc.keyframe_points.add(len(frames))
+                        fc.keyframe_points.foreach_set('co', [x for co in list(
+                            map(lambda f, v: (f, v[i]), frames, values)) for x in co])
+                        fc.update()
+                    
+    
     
     for clump in anm.clumps:
         action = bpy.data.actions.new(f'{anm.name} ({clump.name})')
 
         arm_obj = bpy.data.objects.get(clump.chunk.name)
         if arm_obj is None:
-            arm_obj = bpy.data.objects.get(clump.chunk.name)
+            arm_obj = bpy.data.objects.get(clump.chunk.name + ' [C]')
 
         arm_sca = dict()
         arm_mat = dict()
+        arm_rot = dict()
 
         if arm_obj is not None:
             context.view_layer.objects.active = arm_obj
+            bpy.ops.object.mode_set(mode='EDIT')
 
-            for arm_bone in arm_obj.data.bones:
+            for arm_bone in arm_obj.data.edit_bones:
                 arm_sca[arm_bone.name] = arm_bone.get('scale_signs')
-                arm_mat[arm_bone.name] = Matrix(arm_bone.get('matrix', Matrix.Identity(4)))
+                arm_mat[arm_bone.name] = Matrix(arm_bone.get('matrix'))
+
             
+            bpy.ops.object.mode_set(mode='POSE')
             for arm_bone in arm_obj.pose.bones:
                 arm_bone.rotation_mode = "QUATERNION"
                 
+            bpy.ops.object.mode_set(mode='EDIT')
 
-        for child in clump.children:
-            group_name = action.groups.new(child.name).name
+        for bone in clump.bones:
+            group_name = action.groups.new(bone.name).name
 
-            if child.anm_entry is None:
+            if bone.anm_entry is None:
                 continue
 
 
-            mat_parent = arm_mat.get(child.parent.name, Matrix.Identity(
-                4)) if child.parent else Matrix.Identity(4)
-            mat = arm_mat.get(child.name, Matrix.Identity(4))
+
+            mat_parent = arm_mat.get(bone.parent.name, Matrix.Identity(
+                4)) if bone.parent else Matrix.Identity(4)
+            mat = arm_mat.get(bone.name, Matrix.Identity(4))
 
             mat = (mat_parent.inverted() @ mat)
             loc, rot, sca = mat.decompose()
             rot.invert()
             sca = Vector(map(lambda a: 1/a, sca))
 
+            rotate_vector = arm_rot.get(bone.name,Euler([0,0,0]))
+
             bone_path = f'pose.bones["{group_name}"]'
 
             bone_parent = False
-            if child.parent:
+            if bone.parent:
                 bone_parent = True
 
 
-            for curve in child.anm_entry.curves:
+            for curve in bone.anm_entry.curves:
                 if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
                     continue
 
-                frames = list(map(lambda x: frame_to_blender(x.frame), curve.keyframes))
+                frames = list(
+                    map(lambda x: frame_to_blender(x.frame), curve.keyframes))
 
-                if (child.parent != None):
-                    #values = convert_anm_values_tranformed(curve.data_path, list(map(lambda x: x.value, curve.keyframes)), loc, rot, sca, rotate_vector, bone_parent)
-                    values = convert_anm_values_tranformed(curve.data_path, [x.value for x in curve.keyframes], loc, rot, sca, bone_parent)
+                if (bone.parent != None):
+                    values = convert_anm_values_tranformed(curve.data_path, list(
+                        map(lambda x: x.value, curve.keyframes)), loc, rot, sca, bone_parent)
                 else:
-                    #values = convert_anm_values_tranformed_root(curve.data_path, list(map(lambda x: x.value, curve.keyframes)), loc, rot, sca)
-                    values = convert_anm_values_tranformed_root(curve.data_path, [x.value for x in curve.keyframes], loc, rot, sca)
+                    values = convert_anm_values_tranformed_root(curve.data_path, list(
+                        map(lambda x: x.value, curve.keyframes)), loc, rot, sca)
 
                 if (curve.data_path == AnmDataPath.ROTATION_EULER):
                     curve.data_path = AnmDataPath.ROTATION_QUATERNION
@@ -969,48 +1095,62 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
                     fc = action.fcurves.new(
                         data_path=data_path, index=i, action_group=group_name)
                     fc.keyframe_points.add(len(frames))
-                    fc.keyframe_points.foreach_set('co', [x for co in list(map(lambda f, v: (f, v[i]), frames, values)) for x in co])
+                    fc.keyframe_points.foreach_set('co', [x for co in list(
+                        map(lambda f, v: (f, v[i]), frames, values)) for x in co])
 
                     fc.update()
 
-        actions.append(action)
-    '''except Exception as e:
-        print(e)'''
+        """for clump in anm.clumps:
+            for material in clump.materials:
+                action = bpy.data.actions.new(f'{anm.name} ({material.name})')
+
+                group_name = action.groups.new(anm.name).name
 
 
-    #calculate the time it took to make the actions
-    print(f"Time: {time.time() - start_time}")
+                node_tree = bpy.data.materials.get(material.name).node_tree
+                mapping_node = node_tree.nodes.get("Mapping")
 
-
-    '''
-    # Create the constraints for the armatures if they exist
-    for p in anm.coord_parents:
-        if anm.clumps[p.parent_clump_index] != anm.clumps[p.child_clump_index]: # The parent and child clump are different, so it's a constraint
-
-            arm_obj = bpy.data.objects.get(anm.clumps[p.child_clump_index].chunk.name + ' [C]')
-            target_arm_obj = bpy.data.objects.get(anm.clumps[p.parent_clump_index].chunk.name + ' [C]')
-            target_bone = anm.clumps[p.parent_clump_index].bones[p.parent_coord_index].name
-
-            if arm_obj and target_arm_obj:
-                # Create the child of constraint for the armature using the target armature and bone
-
-                # Set the armature as the active object
-                context.view_layer.objects.active = arm_obj
-
-                # Check if the 'Child Of' constraint already exists, if not, add it
-                if 'Child Of' not in arm_obj.constraints:
-                    childof_constraint = arm_obj.constraints.new(type='CHILD_OF')
-                else:
-                    childof_constraint = arm_obj.constraints['Child Of']
-
-                # Set the 'Child Of' constraint properties
-                childof_constraint.target = target_arm_obj
-                childof_constraint.subtarget = target_bone
-                childof_constraint.inverse_matrix = Matrix.Identity(4)
-            else: # One of the armatures doesn't exist
-                print(f"Couldn't find one of the constraint armatures: {anm.clumps[p.child_clump_index].chunk.name + ' [C]'}")'''
                 
+                if mapping_node is None:
+                    mapping_node = node_tree.nodes.new(type='ShaderNodeMapping')
+                    mapping_node.name = "Mapping"
+                    mapping_node.location = (0, 0)
+            
+                for curve in material.anm_entry.curves:
+                    if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
+                        continue
 
+                    frames = list(map(lambda x: frame_to_blender(x.frame), curve.keyframes))
+                    values = list(map(lambda x: x.value, curve.keyframes))
+
+                    
+
+                    if curve.data_path == AnmDataPath.U1_LOCATION:
+                        for frame, value in zip(frames, values):
+                            mapping_node.inputs['Location'].default_value[0] = value[0]
+                            mapping_node.inputs['Location'].keyframe_insert(data_path="default_value", index=0, frame=frame, group=group_name)
+
+
+                    if curve.data_path == AnmDataPath.V1_LOCATION:
+                        for frame, value in zip(frames, values):
+                            mapping_node.inputs['Location'].default_value[1] = value[0]
+                            mapping_node.inputs['Location'].keyframe_insert(data_path="default_value", index=1, frame=frame, group=group_name)
+                    
+                    if curve.data_path == AnmDataPath.U1_SCALE:
+                        for frame, value in zip(frames, values):
+                            mapping_node.inputs['Scale'].default_value[0] = value[0]
+                            mapping_node.inputs['Scale'].keyframe_insert(data_path="default_value", index=0, frame=frame, group=group_name)
+                    
+                    if curve.data_path == AnmDataPath.V1_SCALE:
+                        for frame, value in zip(frames, values):
+                            mapping_node.inputs['Scale'].default_value[1] = value[0]
+                            mapping_node.inputs['Scale'].keyframe_insert(data_path="default_value", index=1, frame=frame, group=group_name)"""
+                            
+
+        actions.append(action)
+   
+    
+    print(f"Animation(s) imported in: {time.time() - start_time}")
     context.scene.render.fps = 30
 
     return actions
@@ -1104,4 +1244,4 @@ def convert_anm_values(data_path: AnmDataPath, values):
 
 def menu_func_import(self, context):
     self.layout.operator(ImportXFBIN.bl_idname,
-                         text='XFBIN Model Container (.xfbin)')
+                         text='XFBIN Model / Animation Container (.xfbin)')

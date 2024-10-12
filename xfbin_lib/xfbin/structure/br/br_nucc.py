@@ -1,6 +1,5 @@
 from ...util import *
 from .br_anm import *
-from .br_anm_strm import *
 from .br_nud import *
 from .br_nut import *
 
@@ -710,37 +709,6 @@ class BrNuccChunkAnm(BrNuccChunk):
             br.write_struct(BrAnmEntry(), entry)
 
 
-class BrNuccChunkAnmStrm(BrNuccChunk):
-    def init_data(self, br: BinaryReader):
-        super().init_data(br)
-        
-        self.AnmLength = br.read_uint32()
-        self.FrameSize = br.read_uint32()
-        self.FrameCount = br.read_uint16()
-        self.isLooped = br.read_uint16()
-        self.ClumpCount = br.read_uint16()
-        self.OtherEntryCount = br.read_uint16()
-        self.CoordCount = br.read_uint32()
-
-        self.Clumps = br.read_struct(BrStrmClump, self.ClumpCount)
-
-        self.OtherEntryIndices = br.read_uint32(self.OtherEntryCount)
-
-        self.CoordParents = br.read_struct(BrAnmCoordParent, self.CoordCount)
-
-        self.FrameInfo = br.read_struct(BrStrmFrameInfo, self.FrameCount)
-
-
-class BrNuccChunkAnmStrmFrame(BrNuccChunk):
-    def init_data(self, br: BinaryReader,):
-        super().init_data(br)
-
-        self.Frame = br.read_uint32()
-        self.EntryCount = br.read_uint16()
-        self.Unk = br.read_uint16()
-        self.Entries = br.read_struct(BrStrmEntry, self.EntryCount)
-
-
 class BrNuccChunkCamera(BrNuccChunk):
     def init_data(self, br: BinaryReader):
         super().init_data(br)
@@ -748,3 +716,23 @@ class BrNuccChunkCamera(BrNuccChunk):
         self.unk = br.read_uint32()
         self.fov = br.read_float()
 
+
+class BrNuccChunkLightDirc(BrNuccChunk):
+    def init_data(self, br: BinaryReader):
+        super().init_data(br)
+
+        self.data = br.read_bytes(64)
+
+    
+class BrNuccChunkLightPoint(BrNuccChunk):
+    def init_data(self, br: BinaryReader):
+        super().init_data(br)
+
+        self.data = br.read_bytes(64)
+
+class BrNuccChunkAmbient(BrNuccChunk):
+    def init_data(self, br: BinaryReader):
+        super().init_data(br)
+
+        self.color = br.read_float(3)
+        self.strength = br.read_float()
