@@ -519,27 +519,6 @@ class MaterialTextureGroup:
         return iter(self.texture_chunks)
 
 
-class NuccChunkAnmStrm(BrNuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkAnmStrm, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
-        
-        self.data = br_chunk.data
-        #self.version = br_chunk.version
-        self.has_data = True
-        self.has_props = False
-
-        self.anm_length = br_chunk.AnmLength
-        self.frame_size = br_chunk.FrameSize
-        self.loop_anm = br_chunk.isLooped
-        self.clump_count = br_chunk.ClumpCount
-        self.other_entry_count = br_chunk.OtherEntryCount
-        self.coord_count = br_chunk.CoordCount
-
-        self.clumps: List[AnmClump] = list()
-        self.other_entry_indices = br_chunk.OtherEntryIndices
-        self.coord_parents = br_chunk.CoordParents
-        self.frames = []
-
-
 class NuccChunkModelHit(NuccChunk):
     def init_data(self, br_chunk: BrNuccChunkModelHit, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
@@ -626,25 +605,21 @@ class NuccChunkAnm(NuccChunk):
         self.frame_size = br_chunk.frame_size
         self.loop_flag = br_chunk.loop_flag
 
-        #print(f"{br_chunk.name}")
-
         # Set up the clumps
         self.clumps: List[AnmClump] = list()
         for br_anm_clump in br_chunk.clumps:
             anm_clump = AnmClump()
-            anm_clump.init_data(br_anm_clump, chunk_refs, initial_chunks)
+            anm_clump.init_data(br_anm_clump, chunk_refs)
             self.clumps.append(anm_clump)
 
-
-        self.coord_parents: List[BrAnmCoordParent] = br_chunk.coord_parents
         # Set up the child-parent relations in AnmBones
-        for p in self.coord_parents:
+        for p in br_chunk.coord_parents:
             if -1 in [p.parent_clump_index, p.parent_coord_index, p.child_clump_index, p.child_coord_index]:
                 continue
             
             p: BrAnmCoordParent
-            parent = self.clumps[p.parent_clump_index].children[p.parent_coord_index]
-            child = self.clumps[p.child_clump_index].children[p.child_coord_index]
+            parent = self.clumps[p.parent_clump_index].bones[p.parent_coord_index]
+            child = self.clumps[p.child_clump_index].bones[p.child_coord_index]
             child.parent = parent
             parent.children.append(child)
 
@@ -660,10 +635,41 @@ class NuccChunkAnm(NuccChunk):
         self.other_entries = [e for e in self.entries if e.clump is None]
 
 class NuccChunkCamera(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkCamera, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
+    def init_data(self, br_chunk: BrNuccChunkCamera, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List):
         self.data = br_chunk.data
         self.has_data = True
         self.has_props = False
         self.extension = '.camera'
 
         self.fov = br_chunk.fov
+
+
+class NuccChunkLightDirc(NuccChunk):
+    def init_data(self, br_chunk: BrNuccChunkLightDirc, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List):
+        self.data = br_chunk.data
+        self.has_data = True
+        self.has_props = False
+        self.extension = '.lightdirc'
+
+        self.data = br_chunk.data
+
+
+class NuccChunkLightPoint(NuccChunk):
+    def init_data(self, br_chunk: BrNuccChunkLightPoint, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List):
+        self.data = br_chunk.data
+        self.has_data = True
+        self.has_props = False
+        self.extension = '.lightpoint'
+
+        self.data = br_chunk.data
+
+
+class NuccChunkAmbient(NuccChunk):
+    def init_data(self, br_chunk: BrNuccChunkAmbient, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List):
+        self.data = br_chunk.data
+        self.has_data = True
+        self.has_props = False
+        self.extension = '.ambient'
+
+        self.color = br_chunk.color
+        self.strength = br_chunk.strength
