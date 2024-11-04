@@ -124,3 +124,4 @@ blender/Faces test.py
 blender/read_test.py
 anm_converter.py
 *.blend1
+*.pyc
