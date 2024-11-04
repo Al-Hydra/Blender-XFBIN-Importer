@@ -30,13 +30,14 @@ class AnmEntryFormat(IntEnum):
     LIGHTDIRC = 5
     LIGHTPOINT = 6
     AMBIENT = 8
-    MORPHMODEL = 9
+    MORPH = 9
 
 
 class AnmCurveFormat(IntEnum):
-    FLOAT3 = 0x05  # location/scale
-    INT1_FLOAT3 = 0x06  # location/scale (with keyframe)
-    FLOAT3ALT = 0x08  # rotation
+    FLOAT3 = 0x05  # vector3 no interpolation
+    INT1_FLOAT3 = 0x06  # vector3 linear interpolation
+    INT1_FLOAT3BEZIER = 0x07  # vector3 bezier interpolation
+    FLOAT3ALT = 0x08  # rotation EULER no interpolation
     INT1_FLOAT4 = 0x0A  # rotation quaternions (with keyframe)
     FLOAT1 = 0x0B  # "toggled"
     INT1_FLOAT1 = 0x0C  # camera / toggled

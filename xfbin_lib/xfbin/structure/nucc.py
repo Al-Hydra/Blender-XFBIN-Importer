@@ -635,7 +635,7 @@ class NuccChunkAnm(NuccChunk):
         self.other_entries = [e for e in self.entries if e.clump is None]
 
 class NuccChunkCamera(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkCamera, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List):
+    def init_data(self, br_chunk: BrNuccChunkCamera, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List, initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         self.has_data = True
         self.has_props = False
@@ -645,7 +645,7 @@ class NuccChunkCamera(NuccChunk):
 
 
 class NuccChunkLightDirc(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkLightDirc, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List):
+    def init_data(self, br_chunk: BrNuccChunkLightDirc, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List, initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         self.has_data = True
         self.has_props = False
@@ -655,7 +655,7 @@ class NuccChunkLightDirc(NuccChunk):
 
 
 class NuccChunkLightPoint(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkLightPoint, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List):
+    def init_data(self, br_chunk: BrNuccChunkLightPoint, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List, initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         self.has_data = True
         self.has_props = False
@@ -665,7 +665,7 @@ class NuccChunkLightPoint(NuccChunk):
 
 
 class NuccChunkAmbient(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkAmbient, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List):
+    def init_data(self, br_chunk: BrNuccChunkAmbient, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List, initial_chunks: List['NuccChunk']  ):
         self.data = br_chunk.data
         self.has_data = True
         self.has_props = False

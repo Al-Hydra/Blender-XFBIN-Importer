@@ -1209,8 +1209,7 @@ class XFBIN_Material_OT_Paste(bpy.types.Operator):
         obj = context.object
         mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
         clipboard = bpy.context.scene.xfbin_material_clipboard
-        
-        mat.init_data(clipboard.material_clipboard)
+        mat.init_copy(clipboard.material_clipboard)
 
         self.report({'INFO'}, f"XFBIN Material ({obj.active_material.name}) pasted from clipboard")
 

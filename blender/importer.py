@@ -1033,18 +1033,16 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
 
         if arm_obj is not None:
             context.view_layer.objects.active = arm_obj
-            bpy.ops.object.mode_set(mode='EDIT')
 
-            for arm_bone in arm_obj.data.edit_bones:
+            for arm_bone in arm_obj.data.bones:
                 arm_sca[arm_bone.name] = arm_bone.get('scale_signs')
                 arm_mat[arm_bone.name] = Matrix(arm_bone.get('matrix'))
 
             
-            bpy.ops.object.mode_set(mode='POSE')
+            #bpy.ops.object.mode_set(mode='POSE')
             for arm_bone in arm_obj.pose.bones:
                 arm_bone.rotation_mode = "QUATERNION"
                 
-            bpy.ops.object.mode_set(mode='EDIT')
 
         for bone in clump.bones:
             group_name = action.groups.new(bone.name).name
@@ -1060,7 +1058,9 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
 
             mat = (mat_parent.inverted() @ mat)
             loc, rot, sca = mat.decompose()
-            rot.invert()
+            rot_inverted = rot.copy()
+            rot_inverted.invert()
+            #rot.invert()
             sca = Vector(map(lambda a: 1/a, sca))
 
             rotate_vector = arm_rot.get(bone.name,Euler([0,0,0]))
@@ -1076,15 +1076,9 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
                 if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
                     continue
 
-                frames = list(
-                    map(lambda x: frame_to_blender(x.frame), curve.keyframes))
+                frames = list(map(lambda x: frame_to_blender(x.frame), curve.keyframes))
 
-                if (bone.parent != None):
-                    values = convert_anm_values_tranformed(curve.data_path, list(
-                        map(lambda x: x.value, curve.keyframes)), loc, rot, sca, bone_parent)
-                else:
-                    values = convert_anm_values_tranformed_root(curve.data_path, list(
-                        map(lambda x: x.value, curve.keyframes)), loc, rot, sca)
+                values = convert_anm_values_tranformed(curve.data_path, [x.value for x in curve.keyframes], loc, rot, rot_inverted, sca)
 
                 if (curve.data_path == AnmDataPath.ROTATION_EULER):
                     curve.data_path = AnmDataPath.ROTATION_QUATERNION
@@ -1159,28 +1153,22 @@ def make_actions(anm: NuccChunkAnm, context) -> List[Action]:
 
 
 
-def convert_anm_values_tranformed(data_path: AnmDataPath, values, loc: Vector, rot: Quaternion, sca: Vector, parent: bool):
+def convert_anm_values_tranformed(data_path: AnmDataPath, values, loc: Vector, rot: Quaternion, rot_inverted, sca: Vector):
     if data_path == AnmDataPath.LOCATION:
         updated_values = list()
         for value_loc in values:
             vec_loc = Vector([value_loc[0],value_loc[1],value_loc[2]])
-            vec_loc.rotate(rot)
+            vec_loc.rotate(rot_inverted)
             updated_values.append(vec_loc)
         updated_loc = loc
-        updated_loc.rotate(rot)
+        updated_loc.rotate(rot_inverted)
 
         #return list(map(lambda x: ((x*0.01) - updated_loc)[:], updated_values))
-        return [((x*0.01) - updated_loc)[:] for x in updated_values]
+        return [((x*0.01) - updated_loc) for x in updated_values]
+        #return [((Vector(x)*0.01) - loc) for x in values]
 
     if data_path == AnmDataPath.ROTATION_EULER:
-        rotations = []
-        startQuat = rot
-        for frot in values:
-            endQuat = rot @ rot_to_blender(frot).to_quaternion()
-            if startQuat.dot(endQuat) < 0:
-                endQuat.negate()
-            
-            rotations.append(endQuat)
+        rotations = [rot.rotation_difference(rot_to_blender(rotation).to_quaternion()) for rotation in values]
         
         return rotations
 
@@ -1189,37 +1177,29 @@ def convert_anm_values_tranformed(data_path: AnmDataPath, values, loc: Vector, r
 
         for rotation in values:
             
-            bind_rotaion = rot.conjugated()
+            bind_rotaion = rot.copy()
             rotation = Quaternion((rotation[3], *rotation[:3]))
             #rotate it with the new rotation
             bind_rotaion.rotate(rotation)
             #invert the result
             quat_list.append(Quaternion(bind_rotaion).conjugated())
 
+            '''bind_rotaion = rot.copy()
+            rotation = Quaternion((rotation[3], *rotation[:3]))
+            #rotate it with the new rotation
+            bind_rotaion.rotate(rotation)
+            #invert the result
+            #quat_list.append(Quaternion(bind_rotaion).conjugated())
+            quat_list.append(rot.rotation_difference(Quaternion(bind_rotaion)))'''
+
         return quat_list
 
     if data_path == AnmDataPath.SCALE:
         #return list(map(lambda x: (Vector(([abs(y) for y in x])))[:], values))
-        return [Vector(([abs(y) for y in x]))[:] for x in values]
+        #return [Vector(([abs(y) for y in x]))[:] for x in values]
+        return [x for x in values]
     return values
 
-
-
-
-def convert_anm_values_tranformed_root(data_path: AnmDataPath, values, loc: Vector, rot: Quaternion, sca: Vector):
-    if data_path == AnmDataPath.LOCATION:
-        #return list(map(lambda x: (loc + pos_cm_to_m(x))[:], values))
-        return [loc + pos_cm_to_m(x) for x in values]
-    if data_path == AnmDataPath.ROTATION_EULER:
-        #return list(map(lambda x: (((rot_to_blender(x).to_quaternion()).to_euler()).to_quaternion())[:], values))
-        return [rot_to_blender(x).to_quaternion() for x in values]
-    if data_path == AnmDataPath.ROTATION_QUATERNION:
-        #return list(map(lambda x: (Quaternion((x[3], *x[:3])).inverted())[:], values))
-        return [Quaternion((x[3], *x[:3])).inverted() for x in values]
-    if data_path == AnmDataPath.SCALE:
-        #return list(map(lambda x: (Vector(([abs(y) for y in x])))[:], values))
-        return [Vector(([abs(y) for y in x])) for x in values]
-    return values
 
 
 def convert_anm_values(data_path: AnmDataPath, values):
