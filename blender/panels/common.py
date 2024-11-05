@@ -236,7 +236,7 @@ class XFBIN_LIST_UL_SearchList(UIList):
 # TODO: Change this to be more dynamic, instead of relying on a fixed value
 # Create a separate list for each unique list to be shown in a single object
 # This is needed to avoid the lists being scrolled/expanded at the same time
-for i in range(7):
+for i in range(10):
     panel_idname = f'XFBIN_LIST_UL_List_{i}'
     panel = type(panel_idname,
                  (XFBIN_LIST_UL_List,),
@@ -245,7 +245,7 @@ for i in range(7):
     
     XFBIN_LISTS.append(panel)
 
-for i in range(7):
+for i in range(10):
     panel_idname = f'XFBIN_LIST_UL_SearchList_{i}'
     panel = type(panel_idname,
                  (XFBIN_LIST_UL_SearchList,),

@@ -40,7 +40,8 @@ class AnmModel:
 class AnmClump:
     bones: List[AnmBone]
     models: List[AnmModel]
-    #materials: List[AnmMaterial]
+    materials: List[AnmMaterial]
+    children: List[AnmBone]
 
     def init_data(self, br_anm_clump: BrAnmClump, chunk_refs: List['ChunkReference']):
         clump_ref = chunk_refs[br_anm_clump.clump_index]
@@ -49,24 +50,27 @@ class AnmClump:
         self.chunk = clump_ref.chunk
 
         self.bones: List[AnmBone] = list()
-
+        self.materials: List[AnmMaterial] = list()
+        self.children: List[AnmBone] = list()
+        
+        
         for bone_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.bones)):
-            bone = AnmBone()
-            bone.name = bone_ref.name
-            bone.chunk = bone_ref.chunk
-
-            self.bones.append(bone)
+            if bone_ref.chunk.to_dict().get('Type') == 'nuccChunkMaterial':
+                material = AnmMaterial()
+                material.name = bone_ref.name
+                material.chunk = bone_ref.chunk
+                
+                self.materials.append(material)
             
-        """self.materials: List[AnmMaterial] = list()
+            else:
+                bone = AnmBone()
+                bone.name = bone_ref.name
+                bone.chunk = bone_ref.chunk
 
-        for material_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.bones)):
-            material = AnmMaterial()
-            material.name = material_ref.name
-            material.chunk = material_ref.chunk
-
-            if material.chunk.to_dict().get('Type') == 'nuccChunkMaterial':
-                self.materials.append(material)"""
-             
+                self.bones.append(bone)
+            
+            self.children.append(bone)
+            
     
         self.models: List[AnmModel] = list()
 
@@ -133,19 +137,29 @@ class AnmEntry:
     material: Optional[AnmMaterial]
 
     def init_data(self, br_anm_entry: BrAnmEntry, frame_size: int, clumps: List[AnmClump], other_entry_chunks: List['NuccChunk']):
-        if br_anm_entry.clump_index != -1:
+        
+        if br_anm_entry.entry_format == AnmEntryFormat.BONE:
             self.clump: AnmClump = clumps[br_anm_entry.clump_index]
-
-            # Set up this entry's name and chunk, and set the bone's entry
             self.bone = self.clump.bones[br_anm_entry.bone_index]
             self.bone.anm_entry = self
             self.name = self.bone.name
             self.chunk = self.bone.chunk
         
-      
+        elif br_anm_entry.entry_format == AnmEntryFormat.MATERIAL:
+            self.clump: AnmClump = clumps[br_anm_entry.clump_index]
 
 
-        else:
+            # Combine the bone and materials
+            bone_materials = self.clump.bones + self.clump.materials
+
+
+            self.material = bone_materials[br_anm_entry.bone_index]
+            self.material.anm_entry = self
+            self.name = self.material.name
+            self.chunk = self.material.chunk
+        
+        elif br_anm_entry.clump_index == -1:
+
             self.clump = None
 
             chunk = other_entry_chunks[br_anm_entry.bone_index]
@@ -153,19 +167,6 @@ class AnmEntry:
             self.name = chunk.name
             self.chunk = chunk
 
-
-        """elif br_anm_entry.entry_format == AnmEntryFormat.MATERIAL:
-        self.clump: AnmClump = clumps[br_anm_entry.clump_index]
-
-
-        # Combine the bone and materials
-        bone_materials = self.clump.bones + self.clump.materials
-
-
-        self.material = bone_materials[br_anm_entry.bone_index]
-        self.material.anm_entry = self
-        self.name = self.material.name
-        self.chunk = self.material.chunk"""
 
         self.entry_format = br_anm_entry.entry_format
 
@@ -176,7 +177,36 @@ class AnmEntry:
         curves = sorted(zip(br_anm_entry.curve_headers, br_anm_entry.curves), key=lambda x: x[0].curve_index)
 
         self.curves = list()
-
+        
+        self.material_indices = {0: "U0_LocX", 1: "V0_LocY", 2: "U1_LocX", 3: "V1_LocY", 4: "U2_LocX", 5: "V2_LocY", 6: "U3_LocX", 7: "V3_LocY",
+                                 8: "U0_ScaleX", 9: "V0_ScaleY", 10: "U1_ScaleX", 11: "V1_ScaleY", 12: "BlendRate1", 13: "BlendRate2", 14: "Falloff", 15: "Glare",
+                                 16: "Alpha", 17: "OutlineID", 18: "U2_ScaleX", 19: "V2_ScaleY", 20: "U3_ScaleX", 21: "V3_ScaleY", 22: "unknown"}
+        
+        self.material_curves = {"U0_LocX": [],
+                                "V0_LocY": [],
+                                "U1_LocX": [],
+                                "V1_LocY": [],
+                                "U2_LocX": [],
+                                "V2_LocY": [],
+                                "U3_LocX": [],
+                                "V3_LocY": [],
+                                "U0_ScaleX": [],
+                                "V0_ScaleY": [],
+                                "U1_ScaleX": [],
+                                "V1_ScaleY": [],
+                                "BlendRate1": [],
+                                "BlendRate2": [],
+                                "Falloff": [],
+                                "Glare": [],
+                                "Alpha": [],
+                                "OutlineID" : [],
+                                "U2_ScaleX": [],
+                                "V2_ScaleY": [],
+                                "U3_ScaleX": [],
+                                "V3_ScaleY": [],
+                                "unknown": []}
+        
+        
         if self.entry_format == AnmEntryFormat.BONE:
             for i, cur in enumerate(('location', 'rotation', 'scale', 'toggled')):
                 curve = create_anm_curve(AnmDataPath[cur.upper()], curves[i][0].curve_format,
@@ -220,23 +250,25 @@ class AnmEntry:
                 self.curves.append(curve)
                 setattr(self, f'{cur}_curve', curve)
 
-        
+
+        elif self.entry_format == AnmEntryFormat.MATERIAL:
+            # We have to handle the material curve differently since we need to skip some curves
+            material_curve_indices = (0, 1, 8, 9, 2, 3, 10, 11, 12, 14, 16, 4)
+
+            for i, cur in enumerate(('u1_location', 'v1_location', 'u1_scale', 'v1_scale', 'u2_location', 'v2_location', 'u2_scale', 'v2_scale',
+                                        'blend', 'glare', 'alpha', 'celshade')):
+                curve = create_anm_curve(AnmDataPath[cur.upper()], curves[material_curve_indices[i]][0].curve_format,
+                                        curves[material_curve_indices[i]][1], frame_size) if i < len(curves) else None
+                self.curves.append(curve)
+                setattr(self, f'{cur}_curve', curve)
+            
 
         else:
             self.curves = list(map(lambda c: create_anm_curve(
                 AnmDataPath.UNKNOWN, c[0].curve_format, c[1], frame_size), curves))
         
 
-    """elif self.entry_format == AnmEntryFormat.MATERIAL:
-    # We have to handle the material curve differently since we need to skip some curves
-    material_curve_indices = (0, 1, 8, 9, 2, 3, 10, 11, 12, 14, 16, 4)
-
-    for i, cur in enumerate(('u1_location', 'v1_location', 'u1_scale', 'v1_scale', 'u2_location', 'v2_location', 'u2_scale', 'v2_scale',
-                                'blend', 'glare', 'alpha', 'celshade')):
-        curve = create_anm_curve(AnmDataPath[cur.upper()], curves[material_curve_indices[i]][0].curve_format,
-                                curves[material_curve_indices[i]][1], frame_size) if i < len(curves) else None
-        self.curves.append(curve)
-        setattr(self, f'{cur}_curve', curve)"""
+    
 
 
 def create_anm_curve(data_path: AnmDataPath, curve_format: AnmCurveFormat, curve_values ,frame_size: int) -> AnmCurve:

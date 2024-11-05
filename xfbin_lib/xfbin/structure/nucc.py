@@ -24,6 +24,7 @@ class NuccChunk:
         self.filePath = file_path
         self.name = name
         self.type = type_str
+        self.version = 0x79
 
         self.has_data = False
         self.has_props = False

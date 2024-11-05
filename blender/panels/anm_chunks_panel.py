@@ -73,12 +73,18 @@ class AnmClumpPropertyGroup(PropertyGroup):
         for model in clump.models:
             item = self.models.add()
             item.init_data(model)
+
         
         self.bones.clear()
+        self.materials.clear()
+        
         for bone in clump.bones:
             item = self.bones.add()
             item.init_data(bone)
         
+        for material in clump.materials:
+            item = self.materials.add()
+            item.init_data(material)
 
 class CameraPropertyGroup(PropertyGroup):
     def update_camera_name(self, context):
@@ -359,7 +365,7 @@ class AnmChunksPropertyPanel(Panel):
 
 
             #models
-            """layout.label(text="Models:")
+            layout.label(text="Models:")
             draw_xfbin_list(layout, 2, clump, str(clump.models), 'models', 'model_index')
 
             if clump.model_index >= 0 and clump.model_index < len(clump.models):
@@ -376,7 +382,7 @@ class AnmChunksPropertyPanel(Panel):
 
             #materials
             layout.label(text="Materials:")
-            draw_xfbin_list(layout, 4, clump, str(clump), 'materials', 'material_index')"""
+            draw_xfbin_list(layout, 4, clump, str(clump), 'materials', 'material_index')
 
 
             # cameras
@@ -388,12 +394,12 @@ class AnmChunksPropertyPanel(Panel):
             if camera:
                 camera_box.prop(camera, 'name')
                 camera_box.prop(camera, 'path')
-                draw_xfbin_list(camera_box, 3, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'cameras', 'camera_index')
+                draw_xfbin_list(camera_box, 5, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'cameras', 'camera_index')
                 box = camera_box.box()
                 box.prop_search(anm.cameras[anm.camera_index], 'name', bpy.data, 'cameras', text="Camera", icon='CAMERA_DATA')
                 
             else:
-                draw_xfbin_list(camera_box, 3, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'cameras', 'camera_index')
+                draw_xfbin_list(camera_box, 5, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'cameras', 'camera_index')
             
 
             lightdirc_box = layout.box()
@@ -405,12 +411,12 @@ class AnmChunksPropertyPanel(Panel):
                 lightdirc_box.prop(lightdirc, 'name')
                 lightdirc_box.prop(lightdirc, 'path')
 
-                draw_xfbin_list(lightdirc_box, 4, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightdircs', 'lightdirc_index')
+                draw_xfbin_list(lightdirc_box, 6, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightdircs', 'lightdirc_index')
 
                 box = lightdirc_box.box()
                 box.prop_search(anm.lightdircs[anm.lightdirc_index], 'name', bpy.data, 'lights', text="LightDirc", icon='LIGHT')
             else:
-                draw_xfbin_list(lightdirc_box, 4, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightdircs', 'lightdirc_index')
+                draw_xfbin_list(lightdirc_box, 6, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightdircs', 'lightdirc_index')
 
 
             lightpoint_box = layout.box()
@@ -422,12 +428,12 @@ class AnmChunksPropertyPanel(Panel):
                 lightpoint_box.prop(lightpoint, 'name')
                 lightpoint_box.prop(lightpoint, 'path')
 
-                draw_xfbin_list(lightpoint_box, 5, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightpoints', 'lightpoint_index')
+                draw_xfbin_list(lightpoint_box, 7, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightpoints', 'lightpoint_index')
 
                 box = lightpoint_box.box()
                 box.prop_search(anm.lightpoints[anm.lightpoint_index], 'name', bpy.data, 'lights', text="LightPoint", icon='LIGHT')
             else:
-                draw_xfbin_list(lightpoint_box, 5, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightpoints', 'lightpoint_index')
+                draw_xfbin_list(lightpoint_box, 7, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightpoints', 'lightpoint_index')
 
             ambient_box = layout.box()
             ambient_box.label(text="Ambient Lights:")
@@ -438,12 +444,12 @@ class AnmChunksPropertyPanel(Panel):
                 ambient_box.prop(ambient, 'name')
                 ambient_box.prop(ambient, 'path')
 
-                draw_xfbin_list(ambient_box, 6, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'ambients', 'ambient_index')
+                draw_xfbin_list(ambient_box, 8, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'ambients', 'ambient_index')
 
                 box = ambient_box.box()
                 box.prop_search(anm.ambients[anm.ambient_index], 'name', bpy.data, 'lights', text="Ambient", icon='WORLD')
             else:
-                draw_xfbin_list(ambient_box, 6, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'ambients', 'ambient_index')
+                draw_xfbin_list(ambient_box, 8, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'ambients', 'ambient_index')
 
             
 
