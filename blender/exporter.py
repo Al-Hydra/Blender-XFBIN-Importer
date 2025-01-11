@@ -31,7 +31,7 @@ from ..xfbin_lib.xfbin.structure.nud import (Nud, NudMaterial,
                                              NudMaterialTexture, NudMesh,
                                              NudMeshGroup, NudVertex)
 from ..xfbin_lib.xfbin.structure.nut import Nut, NutTexture
-from ..xfbin_lib.xfbin.structure.dds import DDS_to_NutTexture, read_dds
+from ..xfbin_lib.xfbin.structure.texture_converter import convert_texture
 from ..xfbin_lib.xfbin.structure.xfbin import Xfbin
 from ..xfbin_lib.xfbin.util.binary_reader.binary_reader.binary_reader import (
     BinaryReader, Endian)
@@ -452,7 +452,7 @@ class XfbinExporter:
         return clump
 
     def make_coords(self, armature: Armature, clump: NuccChunkClump, context) -> List[NuccChunkCoord]:
-        bpy.ops.object.mode_set(mode='EDIT')
+        #bpy.ops.object.mode_set(mode='EDIT')
 
         coords: List[NuccChunkCoord] = list()
         
@@ -467,8 +467,8 @@ class XfbinExporter:
             node = coord.node
             node.parent = coord_parent
 
-            local_matrix: Matrix = parent_matrix.inverted() @ bone.matrix
-            pos, _, sca = local_matrix.decompose()  # Rotation should be converted from the matrix directly
+            local_matrix: Matrix = parent_matrix.inverted() @ bone.matrix_local
+            pos, rot, sca = local_matrix.decompose()  # Rotation should be converted from the matrix directly
 
             # Apply the scale signs if they exist
             scale_signs = bone.get('scale_signs')
@@ -477,7 +477,7 @@ class XfbinExporter:
 
             # Set the coordinates of the node
             node.position = pos_m_to_cm(pos)
-            node.rotation = rot_from_blender(local_matrix.to_euler('ZYX'))
+            node.rotation = rot_from_blender(rot.to_euler('ZYX'))
             node.scale = sca[:]
 
             # Set the unknown values if they were imported
@@ -499,7 +499,7 @@ class XfbinExporter:
 
             # Recursively add all children of each bone
             for c in bone.children:
-                make_coord(c, node, bone.matrix)
+                make_coord(c, node, bone.matrix_local)
         
         def make_coord_og(bone: EditBone, coord_parent: CoordNode = None, parent_matrix: Matrix = Matrix.Identity(4)):
             coord = NuccChunkCoord(clump.filePath, bone.name)
@@ -515,13 +515,17 @@ class XfbinExporter:
                 node.position = tuple(bone['orig_coords'][0])
                 node.rotation = tuple(bone['orig_coords'][1])
                 node.scale = tuple(bone['orig_coords'][2])
+            elif bone.get('original_coords'):
+                node.position = tuple(bone['original_coords'][0])
+                node.rotation = tuple(bone['original_coords'][1])
+                node.scale = tuple(bone['original_coords'][2])
             else:
-                local_matrix: Matrix = parent_matrix.inverted() @ bone.matrix
-                pos, _, sca = local_matrix.decompose()  # Rotation should be converted from the matrix directly
+                local_matrix: Matrix = parent_matrix.inverted() @ bone.matrix_local
+                pos, rot, sca = local_matrix.decompose()  # Rotation should be converted from the matrix directly
 
                 # Set the coordinates of the node
                 node.position = pos_m_to_cm(pos) #tuple(pos) 
-                node.rotation = rot_from_blender(local_matrix.to_euler('ZYX'))
+                node.rotation = rot_from_blender(rot.to_euler('ZYX'))
                 node.scale = sca[:]
 
             # Set the unknown values if they were imported
@@ -544,21 +548,21 @@ class XfbinExporter:
 
             # Recursively add all children of each bone
             for c in bone.children:
-                make_coord_og(c, node, bone.matrix)
+                make_coord_og(c, node, bone.matrix_local)
 
         # Iterate through the root bones to process their children in order
         if self.use_original_coords:
-            for root_bone in [b for b in armature.edit_bones if b.parent is None]:
+            for root_bone in [b for b in armature.bones if b.parent is None]:
                 make_coord_og(root_bone)
         else:
-            for root_bone in [b for b in armature.edit_bones if b.parent is None]:
+            for root_bone in [b for b in armature.bones if b.parent is None]:
                 make_coord(root_bone)
 
         for coord in coords:
             if coord.node.parent:
                 coord.node.parent.children.append(coord.node)
 
-        bpy.ops.object.mode_set(mode='OBJECT')
+        #bpy.ops.object.mode_set(mode='OBJECT')
 
         return coords
     
@@ -1191,9 +1195,15 @@ class XfbinExporter:
                                 image.pack()
                                 image.source = 'FILE'
                                 image_data = image.packed_file.data
-                            nuttex: NutTexture = DDS_to_NutTexture(read_dds(image_data))
-                            t.nut.textures.append(nuttex)
-                            t.nut.texture_count += 1
+                            
+                            try:
+                                nuttex: NutTexture = convert_texture(image_data)
+                                t.nut.textures.append(nuttex)
+                                t.nut.texture_count += 1
+                            except Exception as e:
+                                print(e)
+                                self.operator.report({'WARNING'}, f'Could not export texture {tex.name}. Unsupported texture format.')    
+                                continue
                         else:
                             self.operator.report({'WARNING'}, f'Could not export texture {tex.name}. Make sure that the image is assigned to the texture.')
                             continue

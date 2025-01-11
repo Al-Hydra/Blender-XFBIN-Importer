@@ -2,7 +2,7 @@ from enum import IntEnum
 from typing import List, Optional, Union
 
 from .br.br_anm import *
-
+import time
 
 class AnmBone:
     name: str
@@ -15,6 +15,7 @@ class AnmBone:
 
     def __init__(self):
         self.name = ''
+        self.referenced_name = ''
         self.chunk = None
         self.parent = None
         self.children = list()
@@ -28,13 +29,16 @@ class AnmMaterial:
 
     def __init__(self):
         self.name = ''
+        self.referenced_name = ''
         self.chunk = None
         self.anm_entry = None
 
 
 class AnmModel:
     name: str
+    referenced_name: str
     chunk: 'NuccChunk'
+    
 
 
 class AnmClump:
@@ -47,6 +51,7 @@ class AnmClump:
         clump_ref = chunk_refs[br_anm_clump.clump_index]
 
         self.name = clump_ref.chunk.name
+        self.referenced_name = clump_ref.name
         self.chunk = clump_ref.chunk
 
         self.bones: List[AnmBone] = list()
@@ -57,14 +62,16 @@ class AnmClump:
         for bone_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.bones)):
             if bone_ref.chunk.to_dict().get('Type') == 'nuccChunkMaterial':
                 material = AnmMaterial()
-                material.name = bone_ref.name
+                material.name = bone_ref.chunk.name
+                material.referenced_name = bone_ref.name
                 material.chunk = bone_ref.chunk
                 
                 self.materials.append(material)
             
             else:
                 bone = AnmBone()
-                bone.name = bone_ref.name
+                bone.name = bone_ref.chunk.name
+                bone.referenced_name = bone_ref.name
                 bone.chunk = bone_ref.chunk
 
                 self.bones.append(bone)
@@ -76,7 +83,8 @@ class AnmClump:
 
         for model_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.models)):
             model = AnmModel()
-            model.name = model_ref.name
+            model.name = model_ref.chunk.name
+            model.referenced_name = model_ref.name
             model.chunk = model_ref.chunk
             self.models.append(model)
 
@@ -174,7 +182,8 @@ class AnmEntry:
     
 
         # Sort the curves based on curve index (might not actually be necessary)
-        curves = sorted(zip(br_anm_entry.curve_headers, br_anm_entry.curves), key=lambda x: x[0].curve_index)
+        #curves = sorted(zip(br_anm_entry.curve_headers, br_anm_entry.curves), key=lambda x: x[0].curve_index)
+        curves = list(zip(br_anm_entry.curve_headers, br_anm_entry.curves))
 
         self.curves = list()
         
@@ -206,39 +215,41 @@ class AnmEntry:
                                 "V3_ScaleY": [],
                                 "unknown": []}
         
+        self.curves2 = []
         
         if self.entry_format == AnmEntryFormat.BONE:
-            for i, cur in enumerate(('location', 'rotation', 'scale', 'toggled')):
-                curve = create_anm_curve(AnmDataPath[cur.upper()], curves[i][0].curve_format,
-                                         curves[i][1], frame_size) if i < len(curves) else None
-                self.curves.append(curve)
-                setattr(self, f'{cur}_curve', curve)
-
-      
+            '''for i, cur in enumerate(('location', 'rotation', 'scale', 'toggled')):
+                curve = create_anm_curve(AnmDataPath[cur.upper()], curves[i][0].curve_format, curves[i][1], frame_size) if i < len(curves) else None
+                self.curves.append(curve)'''
+                #setattr(self, f'{cur}_curve', curve)
+            
+            
+            
+            self.curves = create_bone_curves(curves, frame_size)     
+            
+            #compare the two lists of curves
+            '''for curve1, curve2 in zip(self.curves, self.curves2):
+                for kf1, kf2 in zip(curve1.keyframes, curve2.keyframes):
+                    if kf1.frame != kf2.frame:
+                        print(f"Frame mismatch! {kf1.frame} != {kf2.frame}, {curve1.data_path}")
+                    if kf1.value != kf2.value:
+                        print(f"Value mismatch! {kf1.value} != {kf2.value}, {curve1.data_path}, {curve2.data_path}")'''
+                                        
+                    
+            
+            #print(self.curves2) 
                                      
         elif self.entry_format == AnmEntryFormat.CAMERA:
-            for i, cur in enumerate(('location', 'rotation', 'camera')):
-                curve = create_anm_curve(AnmDataPath[cur.upper()], curves[i][0].curve_format,
-                                         curves[i][1], frame_size) if i < len(curves) else None
-                self.curves.append(curve)
-                setattr(self, f'{cur}_curve', curve)
+            self.curves = create_camera_curves(curves, frame_size)
         
         elif self.entry_format == AnmEntryFormat.LIGHTDIRC:
-            for i, cur in enumerate(('color', 'energy', 'rotation')):
-                curve = create_anm_curve(AnmDataPath[cur.upper()], curves[i][0].curve_format,
-                                         curves[i][1], frame_size) if i < len(curves) else None
-                self.curves.append(curve)
-                setattr(self, f'{cur}_curve', curve)
+            self.curves = create_lightdirc_curves(curves, frame_size)
         
         elif self.entry_format == AnmEntryFormat.LIGHTPOINT:
-            for i, cur in enumerate(('color', 'energy', 'location', 'radius', 'cutoff')):
-                curve = create_anm_curve(AnmDataPath[cur.upper()], curves[i][0].curve_format,
-                                         curves[i][1], frame_size) if i < len(curves) else None
-                self.curves.append(curve)
-                setattr(self, f'{cur}_curve', curve)
+            self.curves = create_lightpoint_curves(curves, frame_size)
         
         elif self.entry_format == AnmEntryFormat.AMBIENT:
-            for i, cur in enumerate(('color', 'energy')):
+            '''for i, cur in enumerate(('color', 'energy')):
                 curve = create_anm_curve(AnmDataPath[cur.upper()], curves[i][0].curve_format,
                                          curves[i][1], frame_size) if i < len(curves) else None
                 if curve and cur == 'color':
@@ -246,21 +257,14 @@ class AnmEntry:
                         # We need to add an alpha value of 1 to the color curve
                         color_value = list(kf.value) 
                         color_value.append(1.0)
-                        kf.value = tuple(color_value)  
+                        kf.value = list(color_value)  
                 self.curves.append(curve)
-                setattr(self, f'{cur}_curve', curve)
-
-
+                setattr(self, f'{cur}_curve', curve)'''
+                
+            self.curves = create_ambient_curves(curves, frame_size)
+        
         elif self.entry_format == AnmEntryFormat.MATERIAL:
-            # We have to handle the material curve differently since we need to skip some curves
-            material_curve_indices = (0, 1, 8, 9, 2, 3, 10, 11, 12, 14, 16, 4)
-
-            for i, cur in enumerate(('u1_location', 'v1_location', 'u1_scale', 'v1_scale', 'u2_location', 'v2_location', 'u2_scale', 'v2_scale',
-                                        'blend', 'glare', 'alpha', 'celshade')):
-                curve = create_anm_curve(AnmDataPath[cur.upper()], curves[material_curve_indices[i]][0].curve_format,
-                                        curves[material_curve_indices[i]][1], frame_size) if i < len(curves) else None
-                self.curves.append(curve)
-                setattr(self, f'{cur}_curve', curve)
+            self.curves = create_material_curves(curves, frame_size)
             
 
         else:
@@ -268,258 +272,245 @@ class AnmEntry:
                 AnmDataPath.UNKNOWN, c[0].curve_format, c[1], frame_size), curves))
         
 
+
+def create_bone_curves(curves,frame_size):
+    bone_curves = {0: "location",
+                   1: "rotation_quaternion",
+                   2: "scale",
+                   3: "opacity",
+                   11: "rotation_euler",}
     
-
-
-def create_anm_curve(data_path: AnmDataPath, curve_format: AnmCurveFormat, curve_values ,frame_size: int) -> AnmCurve:
-    curve = AnmCurve()
-    curve.data_path = data_path
-    curve.keyframes = None
-
-    if data_path == AnmDataPath.LOCATION:
-        if AnmCurveFormat(curve_format).name.startswith('FLOAT3'):
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-
-        elif curve_format == AnmCurveFormat.INT1_FLOAT3:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
-
-    # Treat euler/quaternion as one, but set the correct data path according to the format
-    if data_path == AnmDataPath.ROTATION:
-        if AnmCurveFormat(curve_format).name.startswith('FLOAT3'):
-            curve.data_path = AnmDataPath.ROTATION_EULER
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-
-        elif curve_format == AnmCurveFormat.INT1_FLOAT4:
-            curve.data_path = AnmDataPath.ROTATION_QUATERNION
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
-
-        if AnmCurveFormat(curve_format).name.startswith('SHORT4'):
-            curve.data_path = AnmDataPath.ROTATION_QUATERNION
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(
-                frame_size * i, tuple(map(lambda x: x / 0x8000, v))), range(len(curve_values)), curve_values))
-
-    elif data_path == AnmDataPath.SCALE:
-        if AnmCurveFormat(curve_format).name.startswith('FLOAT3'):
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-
-        elif curve_format == AnmCurveFormat.INT1_FLOAT3:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
-
-        elif curve_format == AnmCurveFormat.SHORT3:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(
-                frame_size * i, tuple(map(lambda x: x / 0x1000, v))), range(len(curve_values)), curve_values))
-
-    elif data_path == AnmDataPath.TOGGLED:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                        range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
-
-        elif curve_format == AnmCurveFormat.SHORT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(
-                frame_size * i, tuple(map(lambda x: x / 0x8000, v))), range(len(curve_values)), curve_values))
+    #this is done to differentiate between euler and quaternion curves
     
+    eulers = {AnmCurveType.EULERXYZFIXED: 10, AnmCurveType.EULERINTERPOLATE: 10}
+    
+    curves_list = []
 
-    elif data_path == AnmDataPath.U1_LOCATION:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-            
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
-            
-    elif data_path == AnmDataPath.V1_LOCATION:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
+    for curve in curves:
+        anm_curve = AnmCurve()
+        anm_curve.data_path = bone_curves[curve[0].curve_index + eulers.get(curve[0].curve_format, 0)]
+        anm_curve.keyframes = create_curve_keyframes(frame_size, curve[0], curve[1])
         
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                        range(len(curve_values)), curve_values))
-            
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+        curves_list.append(anm_curve)
+    
+    return curves_list
+
+def create_camera_curves(curves,frame_size):
+    camera_curves = {0: "location",
+                     1: "rotation_quaternion",
+                     2: "data.lens"}
+    
+    curves_list = []
+
+    for curve in curves:
+        anm_curve = AnmCurve()
+        anm_curve.data_path = camera_curves[curve[0].curve_index]
+        anm_curve.keyframes = create_curve_keyframes(frame_size, curve[0], curve[1])
         
-    elif data_path == AnmDataPath.U1_SCALE:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+        curves_list.append(anm_curve)
     
-    elif data_path == AnmDataPath.V1_SCALE:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+    return curves_list
+
+def create_lightdirc_curves(curves,frame_size):
+    lightdirc_curves = {0: "color",
+                        1: "energy",
+                        2: "rotation"}
     
-    elif data_path == AnmDataPath.U2_LOCATION:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+    curves_list = []
+
+    for curve in curves:
+        anm_curve = AnmCurve()
+        anm_curve.data_path = lightdirc_curves[curve[0].curve_index]
+        anm_curve.keyframes = create_curve_keyframes(frame_size, curve[0], curve[1])
+        
+        curves_list.append(anm_curve)
     
-    elif data_path == AnmDataPath.V2_LOCATION:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+    return curves_list
+
+def create_lightpoint_curves(curves,frame_size):
+    lightpoint_curves = {0: "color",
+                         1: "energy",
+                         2: "location",
+                         3: "radius",
+                         4: "cutoff"}
     
-    elif data_path == AnmDataPath.U2_SCALE:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+    curves_list = []
+
+    for curve in curves:
+        anm_curve = AnmCurve()
+        anm_curve.data_path = lightpoint_curves[curve[0].curve_index]
+        anm_curve.keyframes = create_curve_keyframes(frame_size, curve[0], curve[1])
+        
+        curves_list.append(anm_curve)
     
-    elif data_path == AnmDataPath.V2_SCALE:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+    return curves_list
+
+def create_ambient_curves(curves,frame_size):
+    ambient_curves = {0: "color",
+                      1: "energy"}
     
-    elif data_path == AnmDataPath.BLEND:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+    curves_list = []
 
-    elif data_path == AnmDataPath.GLARE:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+    for curve in curves:
+        anm_curve = AnmCurve()
+        anm_curve.data_path = ambient_curves[curve[0].curve_index]
+        anm_curve.keyframes = create_curve_keyframes(frame_size, curve[0], curve[1])
+        
+        curves_list.append(anm_curve)
     
-    elif data_path == AnmDataPath.ALPHA:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+    return curves_list
+
+def create_material_curves(curves,frame_size):
+    material_curves = {0: "U0_LocX",
+                       1: "V0_LocY",
+                       2: "U1_LocX",
+                       3: "V1_LocY",
+                       4: "U2_LocX",
+                       5: "V2_LocY",
+                       6: "U3_LocX",
+                       7: "V3_LocY",
+                       8: "U0_ScaleX",
+                       9: "V0_ScaleY",
+                       10: "U1_ScaleX",
+                       11: "V1_ScaleY",
+                       12: "BlendRate1",
+                       13: "BlendRate2",
+                       14: "Falloff",
+                       15: "Glare",
+                       16: "Alpha",
+                       17: "OutlineID",
+                       18: "U2_ScaleX",
+                       19: "V2_ScaleY",
+                       20: "U3_ScaleX",
+                       21: "V3_ScaleY",
+                       22: "unknown"}
     
-    elif data_path == AnmDataPath.CELSHADE:
-        if curve_format == AnmCurveFormat.FLOAT1:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.FLOAT1ALT2:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-        elif curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+    curves_list = []
+
+    for curve in curves:
+        anm_curve = AnmCurve()
+        anm_curve.data_path = material_curves.get(curve[0].curve_index, "unknown")
+        anm_curve.keyframes = create_curve_keyframes(frame_size, curve[0], curve[1])
+        
+        curves_list.append(anm_curve)
+    
+    return curves_list
+
+def create_curve_keyframes(frame_size, curve, curve_frames):
+    curve_to_convert = {AnmCurveType.VECTOR3FIXED: convert_vector3fixed,
+                        AnmCurveType.VECTOR3LINEAR: convert_vector3linear,
+                        AnmCurveType.VECTOR3BEZIER: convert_vector3bezier,
+                        AnmCurveType.EULERXYZFIXED: convert_eulerxyzfixed,
+                        AnmCurveType.EULERINTERPOLATE: convert_eulerinterpolate,
+                        AnmCurveType.QUATERNIONLINEAR: convert_quaternionlinear,
+                        AnmCurveType.FLOATFIXED: convert_floatfixed,
+                        AnmCurveType.FLOATLINEAR: convert_floatlinear,
+                        AnmCurveType.VECTOR2FIXED: convert_vector2fixed,
+                        AnmCurveType.VECTOR2LINEAR: convert_vector2linear,
+                        AnmCurveType.OPACITYI16TBL: convert_opacityi16tbl,
+                        AnmCurveType.SCALEI16TBL: convert_scalei16tbl,
+                        AnmCurveType.QUATERNIONI16TBL: convert_quaternioni16tbl,
+                        AnmCurveType.COLORRGBTBL: convert_colorrgbtbl,
+                        AnmCurveType.VECTOR3TBL: convert_vector3tbl,
+                        AnmCurveType.FLOATTBLNI: convert_floattblni,
+                        AnmCurveType.QUATERNIONTBL: convert_quaterniontbl,
+                        AnmCurveType.FLOATTBL: convert_floattbl,
+                        AnmCurveType.VECTOR3I16LINEAR: convert_vector3i16linear,
+                        AnmCurveType.VECTOR3TBL_NOINTERP: convert_vector3tbl_nointerp,
+                        AnmCurveType.QUATERNIONI16TBL_NOINTERP: convert_quaternioni16tbl_nointerp,
+                        AnmCurveType.OPACITYI16TBL_NOINTERP: convert_opacityi16tbl_nointerp}
+    
+    keyframes = list(curve_to_convert[curve.curve_format](frame_size, curve.keyframe_count, curve_frames))
+        
+    return keyframes
 
 
-    elif data_path == AnmDataPath.CAMERA:
-        if curve_format == AnmCurveFormat.INT1_FLOAT1:
-            curve.keyframes = list(map(lambda kv: AnmKeyframe(kv[0], kv[1:]), curve_values))
+def convert_vector3fixed(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
+    
 
-    elif data_path == AnmDataPath.COLOR:
-        if curve_format == AnmCurveFormat.BYTE3:
-            # in a tuple of 3 values for v, only divide the last 2 values by 255 but not the first value
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, tuple(map(lambda x: float(x) / 255.0, v))),
-                                       range(len(curve_values)), curve_values))
+def convert_vector3linear(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(curve_frames[i][0], curve_frames[i][1:])
 
-    elif data_path == AnmDataPath.ENERGY:
-        if curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-            
-    elif data_path == AnmDataPath.RADIUS:
-        if curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
-            
-    elif data_path == AnmDataPath.CUTOFF:
-        if curve_format == AnmCurveFormat.FLOAT1ALT:
-            curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v),
-                                       range(len(curve_values)), curve_values))
+def convert_vector3bezier(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(curve_frames[i][0], curve_frames[i][1:])
 
-    elif data_path == AnmDataPath.UNKNOWN:
-        curve.keyframes = list(map(lambda i, v: AnmKeyframe(frame_size * i, v), range(len(curve_values)), curve_values))
+def convert_eulerxyzfixed(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
 
-    if curve.keyframes is None:
-        raise Exception(
-            f'nuccChunkAnm: Unexpected curve format ({AnmCurveFormat(curve_format).name}) for curve with data path {AnmDataPath(data_path).name}')
+def convert_eulerinterpolate(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(curve_frames[i][0], curve_frames[i][1:])
 
-    if len(curve.keyframes) and curve.keyframes[-1].frame == -1: # Remove the last keyframe
-        curve.keyframes.pop()
+def convert_quaternionlinear(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(curve_frames[i][0], curve_frames[i][1:])
 
-    return curve
+def convert_floatfixed(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
+
+def convert_floatlinear(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
+
+def convert_vector2fixed(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
+
+def convert_vector2linear(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(i, curve_frames[i])
+
+def convert_opacityi16tbl(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, list(map(lambda x: x / 0x8000, curve_frames[i])))
+
+def convert_scalei16tbl(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, list(map(lambda x: x / 0x1000, curve_frames[i])))
+
+def convert_quaternioni16tbl(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, list(map(lambda x: x / 0x8000, curve_frames[i])))
+
+def convert_colorrgbtbl(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, list(map(lambda x: x / 0xff, curve_frames[i])))
+
+def convert_vector3tbl(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
+
+def convert_floattblni(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
+
+def convert_quaterniontbl(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
+
+def convert_floattbl(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
+
+def convert_vector3i16linear(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(curve_frames[i][0], list(map(lambda x: x / 0x8000, curve_frames[i][1:])))
+
+def convert_vector3tbl_nointerp(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, curve_frames[i])
+
+def convert_quaternioni16tbl_nointerp(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, list(map(lambda x: x / 0x8000, curve_frames[i])))
+
+def convert_opacityi16tbl_nointerp(frame_size, keyframe_count, curve_frames):
+    for i in range(keyframe_count):
+        yield AnmKeyframe(frame_size * i, list(map(lambda x: x / 0x8000, curve_frames[i])))
+        

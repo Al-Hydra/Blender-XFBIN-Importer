@@ -56,7 +56,7 @@ class AnmCurveType(IntEnum):
     VECTOR3FIXED = 5
     VECTOR3LINEAR = 6
     VECTOR3BEZIER = 7
-    EULERXYZFIX = 8
+    EULERXYZFIXED = 8
     EULERINTERPOLATE = 9
     QUATERNIONLINEAR = 10
     FLOATFIXED = 11
@@ -101,7 +101,7 @@ class BrAnmEntry(BrStruct):
             AnmCurveType.VECTOR3FIXED: self.read_vector3fixed,
             AnmCurveType.VECTOR3LINEAR: self.read_vector3linear,
             AnmCurveType.VECTOR3BEZIER: self.read_vector3bezier,
-            AnmCurveType.EULERXYZFIX: self.read_eulerxyzfix,
+            AnmCurveType.EULERXYZFIXED: self.read_eulerxyzfixed,
             AnmCurveType.EULERINTERPOLATE: self.read_eulerinterpolate,
             AnmCurveType.QUATERNIONLINEAR: self.read_quaternionlinear,
             AnmCurveType.FLOATFIXED: self.read_floatfixed,
@@ -144,7 +144,7 @@ class BrAnmEntry(BrStruct):
         for i in range(header.keyframe_count):
             curve[i] = (br.read_int32(), *br.read_float(3))
 
-    def read_eulerxyzfix(self, br, header, curve):
+    def read_eulerxyzfixed(self, br, header, curve):
         for i in range(header.keyframe_count):
             curve[i] = br.read_float(3)
 

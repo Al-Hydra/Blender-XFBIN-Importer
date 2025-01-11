@@ -395,8 +395,7 @@ class BrNuccChunkModel(BrNuccChunk):
     def __br_write__(self, br: 'BinaryReader', chunkIndexDict: IterativeDict):
         br.write_uint16(1)  # Can be 0 sometimes, should test more
 
-        br.write_uint8(0)  # Padding for flag in next byte
-        br.write_uint8(int(self.nuccChunk.rigging_flag))
+        br.write_uint16(int(self.nuccChunk.rigging_flag))
 
         br.write_uint16(self.nuccChunk.model_attributes)
 

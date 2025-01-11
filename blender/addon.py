@@ -14,6 +14,7 @@ from .panels.clump_panel import (ClumpPropertyGroup, clump_classes,
                                  clump_property_groups)
 from .panels.materials_panel import (XfbinMaterialPropertyGroup,
                                      XfbinMatClipboardPropertyGroup,
+                                     XfbinSceneManagerPropertyGroup,
                                         material_classes,
                                         material_property_groups)
 from .panels.common import EmptyPropertyGroup, clear_clipboard, common_classes
@@ -42,8 +43,6 @@ XfbinPointersGroup: Type
 classes = (
     #CustomNodeTest,
     *common_classes,
-    ImportXFBIN,
-    DropXFBIN,
     XFBIN_FH_import,
     XFBIN_UL_IMPORT_LIST,
     XFBIN_OT_IMPORT_ADD_FILE,
@@ -51,6 +50,8 @@ classes = (
     XFBIN_OT_IMPORT_CLEAR_FILES,
     XFBIN_OT_IMPORT_MOVE_FILE,
     XFBIN_IMPORT_FILES,
+    ImportXFBIN,
+    DropXFBIN,
     ExportXfbin,
     *texture_chunks_classes,
     *material_classes,
@@ -82,16 +83,17 @@ def register():
     bpy.types.Object.xfbin_modelhit_mesh_data = PointerProperty(type=ModelHitMesh)
 
     bpy.types.Scene.xfbin_texture_chunks_data = PointerProperty(type=TextureChunksListPropertyGroup)
+    bpy.types.Scene.xfbin_scene = PointerProperty(type=XfbinSceneManagerPropertyGroup)
     bpy.types.Material.xfbin_material_data = PointerProperty(type=XfbinMaterialPropertyGroup)
-    #bpy.types.Scene.xfbin_global_nut_data = PointerProperty(type=GlobalNutPropertyGroup)
 
     # Applies to empties only
     
     bpy.types.Object.xfbin_anm_chunks_data = PointerProperty(type=AnmChunksListPropertyGroup)
+    bpy.types.Scene.xfbin_import_files = PointerProperty(type=XFBIN_IMPORT_FILES)
 
     # Define a new class with exec() because we can't set type hints with type()
     pointers_def = 'class XfbinPointersGroup(PropertyGroup): '
-    for pg_type in (EmptyPropertyGroup, XFBIN_IMPORT_FILES,*clump_property_groups, *nud_property_groups, *nud_mesh_property_groups,
+    for pg_type in (EmptyPropertyGroup, XFBIN_IMPORT_FILES, *clump_property_groups, *nud_property_groups, *nud_mesh_property_groups,
     *texture_chunks_property_groups, *dynamics_chunks_property_groups, *model_hit_property_groups, *material_property_groups):
         pointers_def += f'{pg_type.__name__}: PointerProperty(type={pg_type.__name__}); '
 
@@ -133,6 +135,7 @@ def unregister():
     del bpy.types.Scene.xfbin_clipboard
     del bpy.types.Scene.xfbin_material_clipboard
     del bpy.types.Scene.xfbin_dynamics_clipboard
+    del bpy.types.Scene.xfbin_import_files
 
     bpy.utils.unregister_class(XfbinPointersGroup)
 

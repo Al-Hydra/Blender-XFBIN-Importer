@@ -40,7 +40,8 @@ class NudPropertyGroup(PropertyGroup):
     rigging_flag_extra: EnumProperty(
         name='Rigging Flag (Extra)',
         items=[('16', 'Blur (0x10)', ''),
-               ('32', 'Shadow (0x20)', ''), ],
+               ('32', 'Shadow (0x20)', ''),
+                ('256', 'Morph (0x100)', ''), ],
         description='Both are usually always on',
         options={'ENUM_FLAG'},
         default={'16', '32'},
@@ -128,6 +129,9 @@ class NudPropertyGroup(PropertyGroup):
             rigging_flag_extra.add('16')
         if model.rigging_flag & RiggingFlag.SHADOW:
             rigging_flag_extra.add('32')
+        if model.rigging_flag & RiggingFlag.MORPH:
+            rigging_flag_extra.add('256')
+        
 
         self.rigging_flag_extra = rigging_flag_extra
 

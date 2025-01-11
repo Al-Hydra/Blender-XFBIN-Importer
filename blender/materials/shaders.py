@@ -13,52 +13,10 @@ def F00A(self, mesh, xfbin_mat, mesh_flags):
 	#check if F00A_Material exists
 	material = bpy.data.materials.get('F00A_Material')
 	if not material:
-		material_path = f'{path}/F00A.blend'
+		material_path = f'{path}/XFBIN_Materials.blend'
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.materials = ['F00A_Material']
 		material = data_to.materials[0]
-	
-	#check if a lightDirection object exists
-	lightDirection = bpy.data.objects.get('lightDirection')
-	if lightDirection:
-		#make sure it's linked to the scene
-		if lightDirection.users_scene:
-			pass
-		else:
-			bpy.context.collection.objects.link(lightDirection)
-	else:
-		#create a sun lamp
-		lightDirection = bpy.data.lights.new(name='lightDirection', type='SUN')
-		lightDirection.energy = 1
-
-		#create an object for the lamp
-		lightDirection_obj = bpy.data.objects.new('lightDirection', lightDirection)
-		lightDirection_obj.location = (0, 0, 0)
-
-		#link the lamp to the scene
-		bpy.context.collection.objects.link(lightDirection_obj)
-	
-	#check if pointLightPos0 object exists
-	pointLightPos0 = bpy.data.objects.get('pointLightPos0')
-
-	if pointLightPos0:
-		#make sure it's linked to the scene
-		if pointLightPos0.users_scene:
-			pass
-		else:
-			bpy.context.collection.objects.link(pointLightPos0)
-	else:
-		#create a point lamp
-		pointLightPos0 = bpy.data.lights.new(name='pointLightPos0', type='POINT')
-		pointLightPos0.energy = 1
-
-		#create an object for the lamp
-		pointLightPos0_obj = bpy.data.objects.new('pointLightPos0', pointLightPos0)
-		pointLightPos0_obj.location = (0, 0, 0)
-
-		#link the lamp to the scene
-		bpy.context.collection.objects.link(pointLightPos0_obj)
-	
 
 	material = material.copy()
 	material.name = xfbin_mat.name
@@ -91,7 +49,7 @@ def F00A(self, mesh, xfbin_mat, mesh_flags):
 	tex3_node.image = bpy.data.images.get('celshade')
 
 	#find the shader node
-	shader_node = material.node_tree.nodes.get('F00A')
+	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
 
 	#set uvOffset and uvScale
 	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
@@ -117,53 +75,12 @@ def _02_F00A(self, mesh, xfbin_mat, mesh_flags):
 	#check if F00A_Material exists
 	material = bpy.data.materials.get('2F00A_Material')
 	if not material:
-		material_path = f'{path}/2F00A.blend'
+		material_path = f'{path}/XFBIN_Materials.blend'
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.materials = ['2F00A_Material']
 		material = data_to.materials[0]
 	
-	#check if a lightDirection object exists
-	lightDirection = bpy.data.objects.get('lightDirection')
-	if lightDirection:
-		#make sure it's linked to the scene
-		if lightDirection.users_scene:
-			pass
-		else:
-			bpy.context.collection.objects.link(lightDirection)
-	else:
-		#create a sun lamp
-		lightDirection = bpy.data.lights.new(name='lightDirection', type='SUN')
-		lightDirection.energy = 1
-
-		#create an object for the lamp
-		lightDirection_obj = bpy.data.objects.new('lightDirection', lightDirection)
-		lightDirection_obj.location = (0, 0, 0)
-
-		#link the lamp to the scene
-		bpy.context.collection.objects.link(lightDirection_obj)
-	
-	#check if pointLightPos0 object exists
-	pointLightPos0 = bpy.data.objects.get('pointLightPos0')
-
-	if pointLightPos0:
-		#make sure it's linked to the scene
-		if pointLightPos0.users_scene:
-			pass
-		else:
-			bpy.context.collection.objects.link(pointLightPos0)
-	else:
-		#create a point lamp
-		pointLightPos0 = bpy.data.lights.new(name='pointLightPos0', type='POINT')
-		pointLightPos0.energy = 1
-
-		#create an object for the lamp
-		pointLightPos0_obj = bpy.data.objects.new('pointLightPos0', pointLightPos0)
-		pointLightPos0_obj.location = (0, 0, 0)
-
-		#link the lamp to the scene
-		bpy.context.collection.objects.link(pointLightPos0_obj)
-	
-
+ 
 	material = material.copy()
 	material.name = xfbin_mat.name
 	
@@ -205,7 +122,7 @@ def _02_F00A(self, mesh, xfbin_mat, mesh_flags):
 	tex4_node.image = bpy.data.images.get('celshade')
 
 	#find the shader node
-	shader_node = material.node_tree.nodes.get('2F00A')
+	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
 
 	#set uvOffset and uvScale
 	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
@@ -231,8 +148,8 @@ def _02_F00A(self, mesh, xfbin_mat, mesh_flags):
 			shader_node.inputs['blendType'].default_value = prop.values[0]
 	
 	#set blend Rate
-	shader_node.inputs['blendRate Texture 1'].default_value = mat_data.blendRate[0]
-	shader_node.inputs['blendRate Texture 2'].default_value = mat_data.blendRate[1]
+	shader_node.inputs['blendRate1'].default_value = mat_data.blendRate[0]
+	shader_node.inputs['blendRate2'].default_value = mat_data.blendRate[1]
 	
 	return material
 
@@ -243,7 +160,7 @@ def _01_F002(self, mesh, xfbin_mat, mesh_flags):
 	#check if F00A_Material exists
 	material = bpy.data.materials.get('1F002_Material')
 	if not material:
-		material_path = f'{path}/1F002.blend'
+		material_path = f'{path}/XFBIN_Materials.blend'
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.materials = ['1F002_Material']
 		material = data_to.materials[0]
@@ -267,7 +184,7 @@ def _01_F002(self, mesh, xfbin_mat, mesh_flags):
 		tex1_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
 	
 	#find the shader node
-	shader_node = material.node_tree.nodes.get('1F002')
+	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
 
 	#set uvOffset and uvScale
 	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
@@ -283,6 +200,50 @@ def _01_F002(self, mesh, xfbin_mat, mesh_flags):
 	
 	return material
 
+def _01_F003(self, mesh, xfbin_mat, mesh_flags):
+	
+	bpy.context.scene.view_settings.view_transform = 'Standard'
+
+	#check if F00A_Material exists
+	material = bpy.data.materials.get('1F003_Material')
+	if not material:
+		material_path = f'{path}/XFBIN_Materials.blend'
+		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
+			data_to.materials = ['1F003_Material']
+		material = data_to.materials[0]
+
+	material = material.copy()
+	material.name = xfbin_mat.name
+	
+	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	
+	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
+	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
+
+
+	#find Tex1 node
+	tex1_node = material.node_tree.nodes.get('Tex1')
+	tex1_node.image = bpy.data.images.get(f"{texture.name}_0")
+	#set texture wrap mode
+	if texture.wrapModeS == '3':
+		tex1_node.extension = 'EXTEND'
+
+	if not tex1_node.image:
+		tex1_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
+	
+	#find the shader node
+	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
+
+	#set uvOffset and uvScale
+	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
+	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
+	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
+	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
+
+	#set shadows culling
+	material.use_backface_culling_shadow = True
+	
+	return material
 
 def _03_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F002'):
 	
@@ -356,72 +317,6 @@ def _03_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F002'):
 	return material
 
 
-def _01_F003(self, mesh, xfbin_mat, mesh_flags):
-	
-	bpy.context.scene.view_settings.view_transform = 'Standard'
-
-	#check if F00A_Material exists
-	material = bpy.data.materials.get('1F003_Material')
-	if not material:
-		material_path = f'{path}/1F003.blend'
-		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
-			data_to.materials = ['1F003_Material']
-		material = data_to.materials[0]
-
-	material = material.copy()
-	material.name = xfbin_mat.name
-
-	#check if pointLightPos0 object exists
-	pointLightPos0 = bpy.data.objects.get('pointLightPos0')
-
-	if pointLightPos0:
-		#make sure it's linked to the scene
-		if pointLightPos0.users_scene:
-			pass
-		else:
-			bpy.context.collection.objects.link(pointLightPos0)
-	else:
-		#create a point lamp
-		pointLightPos0 = bpy.data.lights.new(name='pointLightPos0', type='POINT')
-		pointLightPos0.energy = 1
-
-		#create an object for the lamp
-		pointLightPos0_obj = bpy.data.objects.new('pointLightPos0', pointLightPos0)
-		pointLightPos0_obj.location = (0, 0, 0)
-
-		#link the lamp to the scene
-		bpy.context.collection.objects.link(pointLightPos0_obj)
-	
-	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
-	
-	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
-	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
-
-
-	#find Tex1 node
-	tex1_node = material.node_tree.nodes.get('Tex1')
-	tex1_node.image = bpy.data.images.get(f"{texture.name}_0")
-	#set texture wrap mode
-	if texture.wrapModeS == '3':
-		tex1_node.extension = 'EXTEND'
-
-	if not tex1_node.image:
-		tex1_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
-	
-	#find the shader node
-	shader_node = material.node_tree.nodes.get('1F003')
-
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
-
-	#set shadows culling
-	material.use_backface_culling_shadow = True
-	
-	return material
-
 def _01_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F008'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
@@ -429,7 +324,7 @@ def _01_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F008'):
 	#check if F00A_Material exists
 	material = bpy.data.materials.get(f'{shader_name}_Material')
 	if not material:
-		material_path = f'{path}/1F008.blend'
+		material_path = f'{path}/XFBIN_Materials.blend'
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.materials = [f'{shader_name}_Material']
 		material = data_to.materials[0]
@@ -437,27 +332,6 @@ def _01_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F008'):
 	material = material.copy()
 	material.name = xfbin_mat.name
 
-	#check if pointLightPos0 object exists
-	pointLightPos0 = bpy.data.objects.get('pointLightPos0')
-
-	if pointLightPos0:
-		#make sure it's linked to the scene
-		if pointLightPos0.users_scene:
-			pass
-		else:
-			bpy.context.collection.objects.link(pointLightPos0)
-	else:
-		#create a point lamp
-		pointLightPos0 = bpy.data.lights.new(name='pointLightPos0', type='POINT')
-		pointLightPos0.energy = 1
-
-		#create an object for the lamp
-		pointLightPos0_obj = bpy.data.objects.new('pointLightPos0', pointLightPos0)
-		pointLightPos0_obj.location = (0, 0, 0)
-
-		#link the lamp to the scene
-		bpy.context.collection.objects.link(pointLightPos0_obj)
-	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
@@ -486,7 +360,7 @@ def _01_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F008'):
 		tex2_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
 	
 	#find the shader node
-	shader_node = material.node_tree.nodes.get(shader_name)
+	shader_node = material.node_tree.nodes.get("XFBIN SHADER")
 
 	#set uvOffset and uvScale
 	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
@@ -495,7 +369,7 @@ def _01_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F008'):
 	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
 
 	shader_node.inputs['falloff'].default_value = mat_data.fallOff
-	shader_node.inputs["Glare Strength"].default_value = 1 + mat_data.glare
+	shader_node.inputs["Glare"].default_value = mat_data.glare
 
 	#set shadows culling
 	material.use_backface_culling_shadow = True
@@ -629,7 +503,7 @@ def _05_F00D(self, mesh, xfbin_mat, mesh_flags):
 
 	material = bpy.data.materials.get('5F00D_Material')
 	if not material:
-		material_path = f'{path}/5F00D.blend'
+		material_path = f'{path}/XFBIN_Materials.blend'
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.materials = ['5F00D_Material']
 		material = data_to.materials[0]
@@ -639,27 +513,6 @@ def _05_F00D(self, mesh, xfbin_mat, mesh_flags):
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
 
-	#check if pointLightPos0 object exists
-	pointLightPos0 = bpy.data.objects.get('pointLightPos0')
-
-	if pointLightPos0:
-		#make sure it's linked to the scene
-		if pointLightPos0.users_scene:
-			pass
-		else:
-			bpy.context.collection.objects.link(pointLightPos0)
-	else:
-		#create a point lamp
-		pointLightPos0 = bpy.data.lights.new(name='pointLightPos0', type='POINT')
-		pointLightPos0.energy = 1
-
-		#create an object for the lamp
-		pointLightPos0_obj = bpy.data.objects.new('pointLightPos0', pointLightPos0)
-		pointLightPos0_obj.location = (0, 0, 0)
-
-		#link the lamp to the scene
-		bpy.context.collection.objects.link(pointLightPos0_obj)
-	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
 	texture2: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[1]
@@ -683,7 +536,7 @@ def _05_F00D(self, mesh, xfbin_mat, mesh_flags):
 	
 	
 	#find the shader node
-	shader_node = material.node_tree.nodes.get('5F00D')
+	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
 
 	#set uvOffset and uvScale
 	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
@@ -858,6 +711,166 @@ def _19_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '19F002'):
 		elif prop.name == "NU_falloff":
 			shader_node.inputs['falloff'].default_value = prop.values[0]
 
+	return material
+
+
+def _01_F801(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F801'):
+	
+	bpy.context.scene.view_settings.view_transform = 'Standard'
+
+	material = bpy.data.materials.get(f'{shader_name}_Material')
+	if not material:
+		material_path = f'{path}/XFBIN_Materials.blend'
+		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
+			data_to.materials = [f'{shader_name}_Material']
+		material = data_to.materials[0]
+
+	material = material.copy()
+	material.name = xfbin_mat.name
+	
+	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+
+	
+	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
+	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
+	texture2: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[1]
+	hatching_n: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[2]
+	hatching1: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[3]
+	texture3: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[4]
+	texture4: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[5]
+
+
+	#find Tex1 node
+	tex1_node = material.node_tree.nodes.get('Tex1')
+	tex1_node.image = bpy.data.images.get(f"{texture.name}_0")
+
+	#set texture wrap mode
+	if texture.wrapModeS == '3':
+		tex1_node.extension = 'EXTEND'
+	
+	if not tex1_node.image:
+		tex1_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
+	
+	tex2_node = material.node_tree.nodes.get('Tex2')
+	tex2_node.image = bpy.data.images.get(f"{texture2.name}_0")
+
+	#set texture wrap mode
+	if texture2.wrapModeS == '3':
+		tex2_node.extension = 'EXTEND'
+	tex2_node.image.colorspace_settings.name = 'Non-Color'
+	
+	if not tex2_node.image:
+		tex2_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
+	
+	tex3_node = material.node_tree.nodes.get('Tex3')
+	tex3_node.image = bpy.data.images.get(f"{texture3.name}_0")
+
+	#set texture wrap mode
+	if texture3.wrapModeS == '3':
+		tex3_node.extension = 'EXTEND'
+	tex3_node.image.colorspace_settings.name = 'Non-Color'
+
+	if not tex3_node.image:
+		tex3_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
+  
+	tex4_node = material.node_tree.nodes.get('Tex4')
+	tex4_node.image = bpy.data.images.get(f"{texture4.name}_0")
+ 
+	#set texture wrap mode
+	if texture4.wrapModeS == '3':
+		tex4_node.extension = 'EXTEND'
+	tex4_node.image.colorspace_settings.name = 'Non-Color'
+	
+	
+	
+	#find the shader node
+	shader_node = material.node_tree.nodes.get(f'XFBIN SHADER')
+
+	#set uvOffset and uvScale
+	'''shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
+	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
+	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
+	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]'''
+
+	#set shader params
+	for prop in mesh.materials[0].properties:
+		if prop.name == "NU_lightingParam":
+			shader_node.inputs['lightingParam X'].default_value = prop.values[0]
+			shader_node.inputs['lightingParam Y'].default_value = prop.values[1]
+		elif prop.name == "NU_msParam0":
+			shader_node.inputs['msParam X'].default_value = prop.values[0]
+			shader_node.inputs['msParam Y'].default_value = prop.values[1]
+			shader_node.inputs['msParam Z'].default_value = prop.values[2]
+			shader_node.inputs['msParam W'].default_value = prop.values[3]
+		elif prop.name == "NU_hatchingParam":
+			shader_node.inputs['hatchingParam X'].default_value = prop.values[0]
+			shader_node.inputs['hatchingParam Y'].default_value = prop.values[1]
+			shader_node.inputs['hatchingParam Z'].default_value = prop.values[2]
+			shader_node.inputs['hatchingParam W'].default_value = prop.values[3]
+		elif prop.name == "NU_specularParam":
+			shader_node.inputs['specularParam X'].default_value = prop.values[0]
+			shader_node.inputs['specularParam Y'].default_value = prop.values[1]
+			shader_node.inputs['specularParam Z'].default_value = prop.values[2]
+			shader_node.inputs['specularParam W'].default_value = prop.values[3]
+		elif prop.name == "NU_outline0Param":
+			shader_node.inputs['outline0Param X'].default_value = prop.values[0]
+			shader_node.inputs['outline0Param Y'].default_value = prop.values[1]
+			#shader_node.inputs['outline0Param Z'].default_value = prop.values[2]
+			shader_node.inputs['outline0Param W'].default_value = prop.values[3]
+
+	return material
+
+
+def _01_F130(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F130'):
+	
+	bpy.context.scene.view_settings.view_transform = 'Standard'
+
+	#check if F00A_Material exists
+	material = bpy.data.materials.get(f'{shader_name}_Material')
+	if not material:
+		material_path = f'{path}/XFBIN_Materials.blend'
+		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
+			data_to.materials = [f'{shader_name}_Material']
+		material = data_to.materials[0]
+
+	material = material.copy()
+	material.name = xfbin_mat.name
+	
+	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	
+	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
+	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
+	texture2: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[1]
+
+
+	#find Tex1 node
+	tex1_node = material.node_tree.nodes.get('Tex1')
+	tex1_node.image = bpy.data.images.get(f"{texture.name}_0")
+	#set texture wrap mode
+	if texture.wrapModeS == '3':
+		tex1_node.extension = 'EXTEND'
+	if not tex1_node.image:
+		tex1_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
+	
+	tex2_node = material.node_tree.nodes.get('Tex2')
+	tex2_node.image = bpy.data.images.get(f"{texture2.name}_0")
+
+	#set texture wrap mode
+	if texture2.wrapModeS == '3':
+		tex2_node.extension = 'EXTEND'
+	
+	if not tex2_node.image:
+		tex2_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
+
+	#find the shader node
+	shader_node = material.node_tree.nodes.get("XFBIN SHADER")
+
+	#get material params from the mesh
+	meshmat = mesh.materials[0]
+
+	#set shadows culling
+	material.use_backface_culling_shadow = True
+	
 	return material
 
 
@@ -1447,7 +1460,7 @@ def _01_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F00F'):
 
 	material = bpy.data.materials.get(f'{shader_name}_Material')
 	if not material:
-		material_path = f'{path}/1F00F.blend'
+		material_path = f'{path}/XFBIN_Materials.blend'
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.materials = [f'{shader_name}_Material']
 		material = data_to.materials[0]
@@ -1486,7 +1499,7 @@ def _01_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F00F'):
 	
 
 	#find the shader node
-	shader_node = material.node_tree.nodes.get(f'{shader_name}')
+	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
 
 	#set uvOffset and uvScale
 	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
@@ -2621,6 +2634,8 @@ shaders_dict = {'00 00 F0 00': F00A,
 				'00 16 F0 0A': _02_F00A,
 				'00 01 F0 02': _01_F002,
 				'00 01 E1 02': _01_F002,
+				'00 01 F8 01': _01_F801,
+				'00 01 F1 30': _01_F130,
 				'00 03 F0 02': _03_F002,
 				'00 01 F0 03': _01_F003,
 				'00 01 F1 03': _01_F003,

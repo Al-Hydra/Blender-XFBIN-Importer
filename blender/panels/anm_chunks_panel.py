@@ -8,37 +8,47 @@ from bpy.types import Action, Panel, PropertyGroup, UIList
 from ...xfbin_lib.xfbin.structure.nucc import NuccChunkAnm, NuccChunkCamera, NuccChunkLightDirc, NuccChunkLightPoint, NuccChunkAmbient
 from ...xfbin_lib.xfbin.structure.anm import AnmClump, AnmBone, AnmModel, AnmKeyframe
 from ..common.helpers import XFBIN_ANMS_OBJ
-from ..importer import make_actions
 from .common import draw_xfbin_list, XFBIN_OPERATORS
 
 #UI Lists
 
 
 
-# What is this for?
 class XFBIN_UL_ANM_CLUMP(UIList):
     
-        def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-            layout.label(text=item.name)
-            layout.prop_search(item, 'name', bpy.data, 'armatures', text="")
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.split(factor=0.5)
+            row.prop(item, 'name', text='', emboss=False)
+            row.prop(item, 'ref_name', text='', emboss=False)
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
+
 
 class AnmClumpBonePropertyGroup(PropertyGroup):
     name: StringProperty()
+    ref_name: StringProperty()
 
     def init_data(self, bone: AnmBone):
         self.name = bone.name
+        self.ref_name = bone.referenced_name
 
 class AnmClumpModelPropertyGroup(PropertyGroup):
     name: StringProperty()
+    ref_name: StringProperty()
 
     def init_data(self, model: AnmModel):
         self.name = model.name
+        self.ref_name = model.referenced_name
 
 class AnmClumpMaterialPropertyGroup(PropertyGroup):
     name: StringProperty()
+    ref_name: StringProperty()
 
     def init_data(self, material: AnmBone):
         self.name = material.name
+        self.ref_name = material.referenced_name
 
 class AnmClumpPropertyGroup(PropertyGroup):
     def update_clump_name(self, context):
@@ -49,7 +59,8 @@ class AnmClumpPropertyGroup(PropertyGroup):
         default='new_clump',
         update=update_clump_name,
     )
-
+    
+    ref_name: StringProperty(name="Ref Name")
 
     clump_index: IntProperty(name="Index")
 
@@ -68,6 +79,7 @@ class AnmClumpPropertyGroup(PropertyGroup):
 
     def init_data(self, clump: AnmClump):
         self.name = clump.name
+        self.ref_name = clump.referenced_name
         
         self.models.clear()
         for model in clump.models:
@@ -235,7 +247,7 @@ class XfbinAnmChunkPropertyGroup(PropertyGroup):
         self.name = self.anm_name
 
     def init_data(self, anm: NuccChunkAnm, camera: Optional[NuccChunkCamera], lightdirc: Optional[NuccChunkLightDirc],
-                lightpoint: Optional[NuccChunkLightPoint], ambient: Optional[NuccChunkAmbient], actions: List[Action] = None):
+                lightpoint: Optional[NuccChunkLightPoint], ambient: Optional[NuccChunkAmbient]):
         
         self.anm_name = anm.name
         self.path = anm.filePath
@@ -294,7 +306,7 @@ class AnmChunksListPropertyGroup(PropertyGroup):
             ambient = ambient_dict.get(anm.filePath, None)
 
             a: XfbinAnmChunkPropertyGroup = self.anm_chunks.add()
-            a.init_data(anm, camera, lightdirc, lightpoint, ambient, make_actions(anm, context))
+            a.init_data(anm, camera, lightdirc, lightpoint, ambient)
 
             
                 
@@ -345,44 +357,78 @@ class AnmChunksPropertyPanel(Panel):
             row = box.row()
             row.prop(anm, 'export_material_animations')      
 
-            
-
             #clumps
+            row = layout.row()
+            row.label(text="Clumps:")
             clump_box = layout.box()
-            clump_box.label(text="Clumps:")
+            row = clump_box.row()
+            row.label(text="Name:")
+            row.label(text="Referenced Name:")
+            
+            #draw ui list
+            row = clump_box.row()
+            row.template_list('XFBIN_UL_ANM_CLUMP', 'Clumps', anm, 'anm_clumps', anm, 'clump_index')
 
             if len(anm.anm_clumps) > 0:
                 clump = anm.anm_clumps[anm.clump_index]
-                
-                clump_box.prop(clump, 'name')
 
-                draw_xfbin_list(clump_box, 1, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'anm_clumps', 'clump_index')
                 box = clump_box.box()
-                box.prop_search(anm.anm_clumps[anm.clump_index], 'name', bpy.data, 'armatures', text="Clump", icon='OUTLINER_OB_ARMATURE')
-        
-            else:
-                draw_xfbin_list(clump_box, 1, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'anm_clumps', 'clump_index')
+                row = box.row()
+                row.prop_search(clump, 'name', bpy.data, 'armatures', text="Clump", icon='OUTLINER_OB_ARMATURE')
+                row.prop_search(clump, 'ref_name', bpy.data, 'armatures', text="Referenced Clump", icon='OUTLINER_OB_ARMATURE')
+
 
 
             #models
             layout.label(text="Models:")
-            draw_xfbin_list(layout, 2, clump, str(clump.models), 'models', 'model_index')
+            models_box = layout.box()
+            row = models_box.row()
+            row.label(text="Name:")
+            row.label(text="Referenced Name:")
+            
+            
+            models_box.template_list('XFBIN_UL_ANM_CLUMP', 'Models', clump, 'models', clump, 'model_index')
 
             if clump.model_index >= 0 and clump.model_index < len(clump.models):
                 model = clump.models[clump.model_index]
-                layout.label(text=f"Model: {model.name}")
-
-                box = layout.box()
-                box.label(text="Model Properties:")
-                box.prop_search(model, 'name', bpy.context.scene, 'objects', text="Model")
+                box = models_box.box()
+                row = box.row()
+                row.prop_search(model, 'name', bpy.context.scene, 'objects', text="Model")
+                row.prop_search(model, 'ref_name', bpy.context.scene, 'objects', text="Referenced Model")
 
             #bones
             layout.label(text="Bones:")
-            draw_xfbin_list(layout, 3, clump, str(clump), 'bones', 'bone_index')
+            
+            bones_box = layout.box()
+            row = bones_box.row()
+            row.label(text="Name:")
+            row.label(text="Referenced Name:")
+            
+            bones_box.template_list('XFBIN_UL_ANM_CLUMP', 'Bones', clump, 'bones', clump, 'bone_index')
+            
+            if clump.bone_index >= 0 and clump.bone_index < len(clump.bones):
+                bone = clump.bones[clump.bone_index]
+                box = bones_box.box()
+                row = box.row()
+                row.prop_search(bone, 'name', bpy.context.scene, 'objects', text="Bone")
+                row.prop_search(bone, 'ref_name', bpy.context.scene, 'objects', text="Referenced Bone")
 
             #materials
             layout.label(text="Materials:")
-            draw_xfbin_list(layout, 4, clump, str(clump), 'materials', 'material_index')
+            
+            materials_box = layout.box()
+            row = materials_box.row()
+            row.label(text="Name:")
+            row.label(text="Referenced Name:")
+            
+            materials_box.template_list('XFBIN_UL_ANM_CLUMP', 'Materials', clump, 'materials', clump, 'material_index')
+            
+            if clump.material_index >= 0 and clump.material_index < len(clump.materials):
+                material = clump.materials[clump.material_index]
+                box = materials_box.box()
+                row = box.row()
+                row.prop_search(material, 'name', bpy.context.scene, 'objects', text="Material")
+                row.prop_search(material, 'ref_name', bpy.context.scene, 'objects', text="Referenced Material")
 
 
             # cameras
@@ -486,7 +532,7 @@ class PlayAnimation(bpy.types.Operator):
             for clump in clumps:
                 #get action
                 #print(chunk.name)
-                action = bpy.data.actions.get(f'{chunk.name} ({clump.name})')
+                action = bpy.data.actions.get(f'{chunk.name}')
                 #print(action)
                 if action:
                     #set action
@@ -501,8 +547,6 @@ class PlayAnimation(bpy.types.Operator):
             self.report({'INFO'}, f'Playing animation {action.name}')
         
         return {'FINISHED'}
-
-
 
 
 anm_chunks_property_groups = (
@@ -521,5 +565,6 @@ anm_chunks_property_groups = (
 anm_chunks_classes = (
     *anm_chunks_property_groups,
     AnmChunksPropertyPanel,
+    XFBIN_UL_ANM_CLUMP,
     PlayAnimation
 )
