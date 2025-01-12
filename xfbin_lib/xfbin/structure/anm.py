@@ -268,8 +268,8 @@ class AnmEntry:
             
 
         else:
-            self.curves = list(map(lambda c: create_anm_curve(
-                AnmDataPath.UNKNOWN, c[0].curve_format, c[1], frame_size), curves))
+            print(f"Unknown entry format: {self.entry_format}")
+            self.curves = list()
         
 
 

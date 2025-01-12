@@ -815,7 +815,7 @@ def _01_F801(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F801'):
 		elif prop.name == "NU_outline0Param":
 			shader_node.inputs['outline0Param X'].default_value = prop.values[0]
 			shader_node.inputs['outline0Param Y'].default_value = prop.values[1]
-			#shader_node.inputs['outline0Param Z'].default_value = prop.values[2]
+			shader_node.inputs['outline0Param Z'].default_value = prop.values[2]
 			shader_node.inputs['outline0Param W'].default_value = prop.values[3]
 
 	return material
@@ -2194,12 +2194,12 @@ def _07_F006(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F006'):
 	#set texture wrap mode
 	if texture3.wrapModeS == '3':
 		tex3_node.extension = 'EXTEND'
-	
-	#set to non-color
-	tex3_node.image.colorspace_settings.name = 'Non-Color'
 
 	if not tex3_node.image:
 		tex3_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
+	
+	#set to non-color
+	tex3_node.image.colorspace_settings.name = 'Non-Color'
 	
 
 	tex4_node = material.node_tree.nodes.get('Tex4')
