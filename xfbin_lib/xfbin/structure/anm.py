@@ -47,46 +47,95 @@ class AnmClump:
     materials: List[AnmMaterial]
     children: List[AnmBone]
 
-    def init_data(self, br_anm_clump: BrAnmClump, chunk_refs: List['ChunkReference']):
-        clump_ref = chunk_refs[br_anm_clump.clump_index]
-
-        self.name = clump_ref.chunk.name
-        self.referenced_name = clump_ref.name
-        self.chunk = clump_ref.chunk
-
-        self.bones: List[AnmBone] = list()
-        self.materials: List[AnmMaterial] = list()
-        self.children: List[AnmBone] = list()
+    def init_data(self, br_anm_clump: BrAnmClump, chunk_version, chunk_refs: List['ChunkReference'], initial_chunks):
+        no_refs = False
+        try:
+            clump_ref = chunk_refs[br_anm_clump.clump_index]
+        except:
+            no_refs = True
         
-        
-        for bone_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.bones)):
-            if bone_ref.chunk.to_dict().get('Type') == 'nuccChunkMaterial':
-                material = AnmMaterial()
-                material.name = bone_ref.chunk.name
-                material.referenced_name = bone_ref.name
-                material.chunk = bone_ref.chunk
+        if no_refs:
+            clump_ref = initial_chunks[br_anm_clump.clump_index]
+
+            self.name = clump_ref.name
+            self.referenced_name = clump_ref.name
+            self.chunk = clump_ref
+
+            self.bones: List[AnmBone] = list()
+            self.materials: List[AnmMaterial] = list()
+            self.children: List[AnmBone] = list()
+            
+            
+            for bone_ref in list(map(lambda x: initial_chunks[x], br_anm_clump.bones)):
+                if bone_ref.to_dict().get('Type') == 'nuccChunkMaterial':
+                    material = AnmMaterial()
+                    material.name = bone_ref.name
+                    material.referenced_name = bone_ref.name
+                    material.chunk = bone_ref
+                    
+                    self.materials.append(material)
                 
-                self.materials.append(material)
-            
-            else:
-                bone = AnmBone()
-                bone.name = bone_ref.chunk.name
-                bone.referenced_name = bone_ref.name
-                bone.chunk = bone_ref.chunk
+                else:
+                    bone = AnmBone()
+                    bone.name = bone_ref.name
+                    bone.referenced_name = bone_ref.name
+                    bone.chunk = bone_ref
 
-                self.bones.append(bone)
-            
-            self.children.append(bone)
-            
-    
-        self.models: List[AnmModel] = list()
+                    self.bones.append(bone)
+                
+                self.children.append(bone_ref)
+                
+        
+            self.models: List[AnmModel] = list()
 
-        for model_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.models)):
-            model = AnmModel()
-            model.name = model_ref.chunk.name
-            model.referenced_name = model_ref.name
-            model.chunk = model_ref.chunk
-            self.models.append(model)
+            for model_ref in list(map(lambda x: initial_chunks[x], br_anm_clump.models)):
+                model = AnmModel()
+                model.name = model_ref.name
+                model.referenced_name = model_ref.name
+                model.chunk = model_ref
+                self.models.append(model)
+        
+        else:
+        
+            clump_ref = chunk_refs[br_anm_clump.clump_index]
+
+            self.name = clump_ref.chunk.name
+            self.referenced_name = clump_ref.name
+            self.chunk = clump_ref.chunk
+
+            self.bones: List[AnmBone] = list()
+            self.materials: List[AnmMaterial] = list()
+            self.children: List[AnmBone] = list()
+            
+            
+            for bone_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.bones)):
+                if bone_ref.chunk.to_dict().get('Type') == 'nuccChunkMaterial':
+                    material = AnmMaterial()
+                    material.name = bone_ref.chunk.name
+                    material.referenced_name = bone_ref.name
+                    material.chunk = bone_ref.chunk
+                    
+                    self.materials.append(material)
+                
+                else:
+                    bone = AnmBone()
+                    bone.name = bone_ref.chunk.name
+                    bone.referenced_name = bone_ref.name
+                    bone.chunk = bone_ref.chunk
+
+                    self.bones.append(bone)
+                
+                self.children.append(bone_ref)
+                
+        
+            self.models: List[AnmModel] = list()
+
+            for model_ref in list(map(lambda x: chunk_refs[x], br_anm_clump.models)):
+                model = AnmModel()
+                model.name = model_ref.chunk.name
+                model.referenced_name = model_ref.name
+                model.chunk = model_ref.chunk
+                self.models.append(model)
 
 
 class AnmKeyframe:
@@ -148,10 +197,10 @@ class AnmEntry:
         
         if br_anm_entry.entry_format == AnmEntryFormat.BONE:
             self.clump: AnmClump = clumps[br_anm_entry.clump_index]
-            self.bone = self.clump.bones[br_anm_entry.bone_index]
+            self.bone = self.clump.children[br_anm_entry.bone_index]
             self.bone.anm_entry = self
             self.name = self.bone.name
-            self.chunk = self.bone.chunk
+            self.chunk = self.bone
         
         elif br_anm_entry.entry_format == AnmEntryFormat.MATERIAL:
             self.clump: AnmClump = clumps[br_anm_entry.clump_index]

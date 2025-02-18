@@ -611,7 +611,7 @@ class NuccChunkAnm(NuccChunk):
         self.clumps: List[AnmClump] = list()
         for br_anm_clump in br_chunk.clumps:
             anm_clump = AnmClump()
-            anm_clump.init_data(br_anm_clump, chunk_refs)
+            anm_clump.init_data(br_anm_clump, br_chunk.version, chunk_refs, initial_chunks)
             self.clumps.append(anm_clump)
 
         # Set up the child-parent relations in AnmBones

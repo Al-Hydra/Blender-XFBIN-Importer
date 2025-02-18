@@ -43,6 +43,7 @@ class BinaryReader:
     __idx: int
     __endianness: Endian
     __encoding: str
+    endianness: str
 
     def __init__(self, buffer: bytearray = bytearray(), endianness: Endian = Endian.LITTLE, encoding='utf-8'):
         """Constructs a BinaryReader with the given buffer, endianness, and encoding and sets its position to 0.\n
@@ -53,6 +54,10 @@ class BinaryReader:
         self.__endianness = endianness
         self.__idx = 0
         self.set_encoding(encoding)
+        if self.__endianness == Endian.BIG:
+            self.endianness = ">"
+        else:
+            self.endianness = "<"
 
     def __enter__(self):
         return self
@@ -337,9 +342,9 @@ class BinaryReader:
         self.__idx += size
 
         if is_iterable:
-            struct.pack_into(f'{count}{format}', self.__buf, i, *value)
+            struct.pack_into(f'{self.endianness}{count}{format}', self.__buf, i, *value)
         else:
-            struct.pack_into(f'{count}{format}', self.__buf, i, value)
+            struct.pack_into(f'{self.endianness}{count}{format}', self.__buf, i, value)
 
     def write_bytes(self, value: bytes) -> None:
         """Writes a bytes object to the buffer."""

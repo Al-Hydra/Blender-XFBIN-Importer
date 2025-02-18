@@ -27,6 +27,7 @@ from .panels.texture_chunks_panel import (TextureChunksListPropertyGroup,
                                           texture_chunks_property_groups)
 from .panels.dynamics_panel import (DynamicsPropertyGroup,
                                     XfbinDynamicsClipboardPropertyGroup,
+                                    XfbinDynamicsBoneBuffer,
                                     dynamics_chunks_classes,
                                     dynamics_chunks_property_groups
                                     
@@ -66,6 +67,7 @@ classes = (
 
 def register():
     global XfbinPointersGroup
+    
 
     for c in classes:
         bpy.utils.register_class(c)
@@ -73,12 +75,13 @@ def register():
     # add to the export / import menu
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+    
 
     # Add Xfbin and Nud properties data
     bpy.types.Object.xfbin_clump_data = PointerProperty(type=ClumpPropertyGroup)  # Applies to armatures only
     bpy.types.Object.xfbin_nud_data = PointerProperty(type=NudPropertyGroup)  # Applies to empties only
     bpy.types.Object.xfbin_mesh_data = PointerProperty(type=NudMeshPropertyGroup)  # Applies to meshes only
-    bpy.types.Object.xfbin_dynamics_data = PointerProperty(type=DynamicsPropertyGroup)  # Applies to empties only
+    bpy.types.Object.xfbin_dynamics_data = PointerProperty(type=DynamicsPropertyGroup)
     bpy.types.Object.xfbin_modelhit_data = PointerProperty(type=ModelHitPropertyGroup)
     bpy.types.Object.xfbin_modelhit_mesh_data = PointerProperty(type=ModelHitMesh)
 
@@ -117,6 +120,7 @@ def register():
     bpy.types.Scene.xfbin_clipboard = PointerProperty(type=XfbinPointersGroup)
     bpy.types.Scene.xfbin_material_clipboard = PointerProperty(type=XfbinMatClipboardPropertyGroup)
     bpy.types.Scene.xfbin_dynamics_clipboard = PointerProperty(type=XfbinDynamicsClipboardPropertyGroup)
+    bpy.types.Scene.xfbin_dynamics_bone_buffer = PointerProperty(type=XfbinDynamicsBoneBuffer)
 
 
 def unregister():
@@ -135,6 +139,7 @@ def unregister():
     del bpy.types.Scene.xfbin_clipboard
     del bpy.types.Scene.xfbin_material_clipboard
     del bpy.types.Scene.xfbin_dynamics_clipboard
+    del bpy.types.Scene.xfbin_dynamics_bone_buffer
     del bpy.types.Scene.xfbin_import_files
 
     bpy.utils.unregister_class(XfbinPointersGroup)

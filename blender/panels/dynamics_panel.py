@@ -9,8 +9,8 @@ from ...xfbin_lib.xfbin.structure.nucc import NuccChunkDynamics, Dynamics1, Dyna
 from ..common.helpers import XFBIN_DYNAMICS_OBJ
 from .common import (EmptyPropertyGroup, draw_copy_paste_ops, draw_xfbin_list,
                      matrix_prop_group, matrix_prop_search, IntPropertyGroup, StringPropertyGroup, PointerProperty, FloatPropertyGroup)
-
-
+from mathutils import Matrix, Vector
+from zlib import crc32
 #custom ui list for spring groups
 
 class XFBIN_UL_SpringGroups(bpy.types.UIList):
@@ -108,7 +108,8 @@ class XFBIN_UL_CollisionGroups(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row(align=True)
-            row.prop(item, 'name', text='', emboss=False, icon_value=icon)
+            display_name = f"Collision Group {index} [{item.bone_collision}]"
+            row.label(text=display_name, icon_value=icon)
             row.prop_search(item, 'bone_collision', context.object.data, 'bones', text='')
 
 
@@ -172,8 +173,6 @@ class XFBIN_CollisionGroup_OT_Copy(bpy.types.Operator):
     def execute(self, context):
         data: DynamicsPropertyGroup = context.object.xfbin_dynamics_data
         bpy.context.scene.xfbin_dynamics_clipboard.copy_collision_group(data.collision_spheres[data.cs_index])
-        #set the index to the last item in the list
-        data.cs_index = len(data.collision_spheres) - 1
 
         return {'FINISHED'}
     
@@ -189,6 +188,10 @@ class XFBIN_CollisionGroup_OT_Paste(bpy.types.Operator):
         col = data.collision_spheres.add()
         for k, v in bpy.context.scene.xfbin_dynamics_clipboard.collision_spheres_clipboard.items():
             col[k] = v
+        
+        
+        #set the index to the last item in the list
+        data.cs_index = len(data.collision_spheres) - 1
         return {'FINISHED'}
     
 
@@ -318,6 +321,8 @@ class SpringGroupsPropertyGroup(PropertyGroup):
             f.value = flag
             if flag & 2:
                 self.maintain_shape = True
+            
+            
 class CollisionSpheresPropertyGroup(PropertyGroup):
 
     def update_count(self, context):
@@ -340,7 +345,6 @@ class CollisionSpheresPropertyGroup(PropertyGroup):
         for obj in bpy.data.objects:
             if obj.type == 'ARMATURE' and obj.xfbin_clump_data.path == context.object.xfbin_dynamics_data.path:
                 armature_obj = obj
-        #col_count = len(context.object.xfbin_dynamics_data.collision_spheres)
 
         #find the group index
         col_count = 0
@@ -416,7 +420,7 @@ class CollisionSpheresPropertyGroup(PropertyGroup):
     def update_name(self):
         self.name = 'Collision Group'
 
-        
+
 
     def init_data(self, colsphere: Dynamics2):
         #offset values
@@ -541,11 +545,12 @@ class DynamicsPropertyPanel(Panel):
         obj = context.object
         layout = self.layout
         data: DynamicsPropertyGroup = obj.xfbin_dynamics_data
+        dynamics_buffer: XfbinDynamicsBoneBuffer = bpy.context.scene.xfbin_dynamics_bone_buffer
         
         draw_copy_paste_ops(layout, 'xfbin_dynamics_data', 'Dynamics Properties')
 
         box = layout.box()
-        box.label(text='Spring Groups')
+        box.label(text='Dynamic Bones')
         #draw_xfbin_list(layout, 0, data, f'xfbin_dynamics_data', 'spring_groups', 'sg_index')
         col = box.column()
         row = col.row()
@@ -561,7 +566,25 @@ class DynamicsPropertyPanel(Panel):
         box = layout.box()
         row = box.row()
         row.operator(XFBIN_OT_AddBoneToSpringGroup.bl_idname)
-        row.operator(SpringGroupSelectBone.bl_idname)
+        row.operator(XFBIN_OT_CopySpringBoneSettings.bl_idname)
+        row.operator(XFBIN_OT_SelectDynamicBone.bl_idname)
+        row.operator(XFBIN_OT_SelectAllDynamicBones.bl_idname, text='Select All')
+        
+        row = box.row()
+        row.prop(dynamics_buffer, "rename_bones", text='Rename Dynamic Bones')
+        row.prop(dynamics_buffer, "copy_bones", text='Copy Bones')
+        row.prop(dynamics_buffer, "copy_collidors", text='Copy Collidors')
+        row.operator(XFBIN_OT_DynamicsSourceTargetHelp.bl_idname, icon='QUESTION', text='')
+        
+        if dynamics_buffer.rename_bones:
+            row = box.row()
+            row.prop(dynamics_buffer, "source_id", text='Source ID')
+            row.prop(dynamics_buffer, "target_id", text='Target ID')
+        
+        row = box.row()
+        row.operator(XFBIN_OT_DynamicBonesExtendedCopy.bl_idname)
+        row.operator(XFBIN_OT_DynamicBonesExtendedPaste.bl_idname)
+        
 
         sg_index = data.sg_index
 
@@ -869,36 +892,9 @@ class MakeCollisions(bpy.types.Operator):
             
         return {'FINISHED'}
 
-class UpdateCollision(bpy.types.Operator):
-    bl_idname = "object.update_coliision"
-    bl_label = "Use object coordinates"
-    bl_description = 'Copy the position and scale info from an existing collision object'
-    @classmethod
-    def poll(cls, context):
-        obj = context.object
-        return obj and obj.type == 'EMPTY' and obj.parent is None and obj.name.startswith(XFBIN_DYNAMICS_OBJ) or obj.type == "ARMATURE"
-    def execute(self, context):
-        
-        cs_index = context.object.xfbin_dynamics_data.cs_index
-        colgroup = context.object.xfbin_dynamics_data.collision_spheres
-        name = colgroup[cs_index].name
-        if colgroup[cs_index]:
-            obj = context.view_layer.objects.get(colgroup[cs_index].name)
-            if obj:
-                colgroup[cs_index].offset_x = obj.location[0] * 100
-                colgroup[cs_index].offset_y = obj.location[1] * 100
-                colgroup[cs_index].offset_z = obj.location[2] * 100
-                colgroup[cs_index].scale_x = obj.scale[0]
-                colgroup[cs_index].scale_y = obj.scale[1]
-                colgroup[cs_index].scale_z = obj.scale[2]
-            else:
-                self.report({"WARNING"}, 'Collision object was not found, use (Make Collisions) button to create it')
 
-        return {'FINISHED'}
-
-
-class SpringGroupSelectBone(bpy.types.Operator):
-    bl_idname = "object.spring_group_select_bone"
+class XFBIN_OT_SelectDynamicBone(bpy.types.Operator):
+    bl_idname = "object.select_dynamic_bone"
     bl_label = "Select Bone"
     bl_description = 'Select the bone in the armature'
     @classmethod
@@ -911,6 +907,10 @@ class SpringGroupSelectBone(bpy.types.Operator):
     def execute(self, context):
         data: DynamicsPropertyGroup = context.object.xfbin_dynamics_data
         bone = data.spring_groups[data.sg_index].bone_spring
+        
+        #deselect all bones
+        bpy.ops.pose.select_all(action='DESELECT')
+        
         if bone in context.object.pose.bones:
             context.object.pose.bones[bone].bone.select = True
         else:
@@ -918,10 +918,34 @@ class SpringGroupSelectBone(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class XFBIN_OT_SelectAllDynamicBones(bpy.types.Operator):
+    bl_idname = "object.select_all_dynamic_bones"
+    bl_label = "Select All Dynamic Bones"
+    bl_description = 'Select all the dynamic bones in the armature'
+    @classmethod
+    def poll(cls, context):
+        obj = context.object
+        #check if we're in pose mode
+        if context.mode != 'POSE':
+            return False
+        return obj.type == "ARMATURE"
+    def execute(self, context):
+        data: DynamicsPropertyGroup = context.object.xfbin_dynamics_data
+        
+        #deslect all bones
+        bpy.ops.pose.select_all(action='DESELECT')
+        
+        for sg in data.spring_groups:
+            if sg.bone_spring in context.object.pose.bones:
+                context.object.pose.bones[sg.bone_spring].bone.select = True
+        return {'FINISHED'}
+
+
 class CollisionsLiveEdit(bpy.types.Operator):
     bl_idname = "object.collisions_live_edit"
     bl_label = "Live Edit Collision Objects"
     bl_description = 'Edit the collision objects in real time'
+    bl_options = {'REGISTER', 'UNDO'}  # REMOVE 'UNDO' to prevent undo issues
 
     main_armature: None
     dyn_armature: None
@@ -953,6 +977,10 @@ class CollisionsLiveEdit(bpy.types.Operator):
             sphere = bpy.data.objects.new('XFBIN Collision Sphere', mesh)        
 
         #check if a skeleton for dynamics exists
+        #remove the dynamics armature if it exists
+        if bpy.data.objects.get(f'{context.object.name}_Dynamics'):
+            bpy.data.objects.remove(bpy.data.objects.get(f'{context.object.name}_Dynamics'))
+        
         self.dyn_armature = xfbin_collection.get(f'{context.object.name}_Dynamics')
         if self.dyn_armature is None:
             data_armature = bpy.data.armatures.new(f'{context.object.name}_Dynamics')
@@ -960,6 +988,14 @@ class CollisionsLiveEdit(bpy.types.Operator):
 
             #link the armature to the collection
             xfbin_collection.objects.link(self.dyn_armature)
+            self.dyn_armature.use_fake_user = True
+        
+        bpy.context.view_layer.update()
+        bpy.context.view_layer.depsgraph.update()
+        # Push the undo state so Blender does NOT include this in the previous undo step
+        bpy.ops.ed.undo_push(message="Add Collision Armature")
+
+        
         
         #make sure that we are in object mode
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -967,6 +1003,9 @@ class CollisionsLiveEdit(bpy.types.Operator):
         #set the dynamics armature as the active object
         bpy.context.view_layer.objects.active = self.dyn_armature
         self.dyn_armature.select_set(True)
+        
+         # 🔹 Add another undo step to make selection a separate action
+        bpy.ops.ed.undo_push(message="Select Dynamics Armature")
 
         #clear the armature
         bpy.ops.object.mode_set(mode='EDIT')
@@ -974,8 +1013,9 @@ class CollisionsLiveEdit(bpy.types.Operator):
         bpy.ops.armature.delete()
         
         #add bones for each collision sphere
-        for col in collision_spheres:
-            bone = self.dyn_armature.data.edit_bones.new(col.name)
+        for i, col in enumerate(collision_spheres):
+            col.name = f'Collision Group {i} [{col.bone_collision}]'
+            bone = self.dyn_armature.data.edit_bones.new(f"Collision Group {i} [{col.bone_collision}]")
             #get the parent bone matrix
             parent_name = col.bone_collision
             parent = context.object.data.bones.get(parent_name)
@@ -983,13 +1023,16 @@ class CollisionsLiveEdit(bpy.types.Operator):
             bone.tail = (0, 0.001, 0)
             bone.use_deform = False
         
+        
+        #make sure that we are in object mode
+        bpy.ops.object.mode_set(mode='OBJECT')
 
         #make sure that we are in object mode
         bpy.ops.object.mode_set(mode='POSE')
 
-        for col in collision_spheres:
+        for i, col in enumerate(collision_spheres):
             col: CollisionSpheresPropertyGroup
-            bone = self.dyn_armature.pose.bones.get(col.name)
+            bone = self.dyn_armature.pose.bones.get(f"Collision Group {i} [{col.bone_collision}]")
             if bone:
                 bone.custom_shape = bpy.data.objects['XFBIN Collision Sphere']
                 #set wireframe
@@ -1059,6 +1102,14 @@ class CollisionsLiveEdit(bpy.types.Operator):
             return self.cancel(context)
         
         if event.type == 'TIMER':
+            #Reassign main armature
+            self.main_armature = context.object
+            if context.object.name.endswith('_Dynamics'):
+                self.main_armature = context.object.users_collection[0].objects.get(context.object.name[:-9])
+            
+            #Reassign dynamics armature
+            self.dyn_armature = context.view_layer.objects[f"{self.main_armature.name}_Dynamics"]
+            
             try:
                 active_pose_bone = context.active_pose_bone
                 active_index = self.dyn_armature.pose.bones.find(active_pose_bone.name)
@@ -1090,23 +1141,332 @@ class CollisionsLiveEdit(bpy.types.Operator):
     
     def cancel(self, context):
         context.window_manager.event_timer_remove(self._timer)
-         #swap to object mode
-        bpy.ops.object.mode_set(mode='OBJECT')
-        #remove the armature
-        bpy.data.objects.remove(self.dyn_armature)
-        #set the main armature as the active object
-        context.view_layer.objects.active = self.main_armature
 
-        #remove constraints
-        '''for bone in self.main_armature.pose.bones:
-            for c in bone.constraints:
-                bone.constraints.remove(c)'''
-        return {'CANCELLED'}
+        # Swap to object mode safely
+        if context.object and context.object.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        if self.dyn_armature:
+            bpy.data.objects.remove(self.dyn_armature)
+
+
+        return {'FINISHED'}
+
+
+
+
+
+class XFBIN_OT_CopySpringBoneSettings(bpy.types.Operator):
+    bl_idname = "xfbin.copy_spring_bone_settings"
+    bl_label = "Copy Settings to Selected Bones"
+    bl_description = 'Copy the active bone settings to all other bones'
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'POSE' and context.active_pose_bone
+    def execute(self, context):
+        spring_groups = context.object.xfbin_dynamics_data.spring_groups
+        sg_index = context.object.xfbin_dynamics_data.sg_index
+        
+        active_sg = spring_groups[sg_index]
+        sg_bone = context.object.pose.bones.get(active_sg.bone_spring)  
+        
+        spring_bones = [sg.bone_spring for sg in spring_groups]
+        
+        if not sg_bone:
+            self.report({'ERROR'}, 'Could not find the selected spring group bone. Canceling...')
+            return {'CANCELLED'}
+        
+        for bone in context.selected_pose_bones:
+            if bone.name == sg_bone.name:
+                continue
+            if bone.name in spring_bones:
+                #get the spring group
+                sg = spring_groups[spring_bones.index(bone.name)]
+                sg.dyn1 = active_sg.dyn1
+                sg.dyn2 = active_sg.dyn2
+                sg.dyn3 = active_sg.dyn3
+                sg.dyn4 = active_sg.dyn4
+                sg.maintain_shape = active_sg.maintain_shape
+                sg.flags.clear()
+                for f in active_sg.flags:
+                    sg.flags.add().value = f.value
+
+        self.report({'INFO'}, f'Copied active bone settings to {[bone for bone in spring_bones if bone != sg_bone.name]}')
+        return {'FINISHED'}
+
+
+class DynamicBoneChild(bpy.types.PropertyGroup):
+    bone_name: bpy.props.StringProperty(name="Bone Name")
+    parent_name: bpy.props.StringProperty(name="Parent Name")
+    child_name: bpy.props.StringProperty(name="Child Name")
+    
+    matrix: bpy.props.FloatVectorProperty(name="Matrix", size=16)
+
+
+class DynamicBoneBufferEntry(bpy.types.PropertyGroup):
+    """Individual bone entry in the copy buffer"""
+    bone_name: bpy.props.StringProperty(name="Bone Name")
+    
+    parent_name: bpy.props.StringProperty(name="Parent Name")
+    
+    has_children: bpy.props.BoolProperty(name="Has Children")
+    
+    children : bpy.props.CollectionProperty(type=DynamicBoneChild)
+        
+    # Store bone matrix
+    matrix: bpy.props.FloatVectorProperty(
+        name="Matrix",
+        size=16
+    )
+    # Physics settings
+    dyn1: bpy.props.FloatProperty(name="Bounciness")
+    dyn2: bpy.props.FloatProperty(name="Elasticity")
+    dyn3: bpy.props.FloatProperty(name="Stiffness")
+    dyn4: bpy.props.FloatProperty(name="Movement")
+    maintain_shape: bpy.props.BoolProperty(name="Maintain Shape")
+
+
+class DynamicsCollidorBufferEntry(bpy.types.PropertyGroup):
+    """Individual collidor entry in the copy buffer"""
+    collidor_parent: bpy.props.StringProperty(name="Parent Name")
+    collidor_offset_x: bpy.props.FloatProperty(name="Offset X")
+    collidor_offset_y: bpy.props.FloatProperty(name="Offset Y")
+    collidor_offset_z: bpy.props.FloatProperty(name="Offset Z")
+    collidor_scale_x: bpy.props.FloatProperty(name="Scale X")
+    collidor_scale_y: bpy.props.FloatProperty(name="Scale Y")
+    collidor_scale_z: bpy.props.FloatProperty(name="Scale Z")
+    collidor_attach_groups: bpy.props.BoolProperty(name="Attach Groups")
+    collidor_attached_count: bpy.props.IntProperty(name="Attached Count")
+    collidor_attached_groups: bpy.props.CollectionProperty(type=StringPropertyGroup)
+
+class XfbinDynamicsBoneBuffer(bpy.types.PropertyGroup):
+    """Main buffer to store copied dynamic bones"""
+    entries: bpy.props.CollectionProperty(type=DynamicBoneBufferEntry)
+    active_index: bpy.props.IntProperty()
+    rename_bones: bpy.props.BoolProperty(name="Rename Bones", default=True)
+    copy_bones: bpy.props.BoolProperty(name="Copy Bones", default=True)
+    source_id: bpy.props.StringProperty()
+    target_id: bpy.props.StringProperty()
+    add_prefix: bpy.props.BoolProperty(name="Add Prefix", default=False)
+    
+    copy_collidors: bpy.props.BoolProperty(name="Copy Collidors", default=True)
+    collidors: bpy.props.CollectionProperty(type=DynamicsCollidorBufferEntry)
+    
+    
+
+class XFBIN_OT_DynamicBonesExtendedCopy(bpy.types.Operator):
+    bl_idname = "xfbin.dynamic_bones_extended_copy"
+    bl_label = "Copy Dynamic Bone"
+    bl_description = "Copy selected dynamic bone to buffer"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        return (context.mode == 'POSE' and context.object.type == 'ARMATURE')
+
+    def execute(self, context):
+        data: DynamicsPropertyGroup = context.object.xfbin_dynamics_data
+        buffer = context.scene.xfbin_dynamics_bone_buffer
+        
+        # Clear existing buffer
+        buffer.entries.clear()
+        buffer.collidors.clear()
+        
+        spring_groups = [sg.bone_spring for sg in data.spring_groups]
+        
+        def process_child_bones(parent_bone, parent_entry):
+            for child in parent_bone.children:
+                child_entry = parent_entry.children.add()
+                child_entry.bone_name = child.name
+                child_entry.parent_name = parent_bone.name
+                
+                flattened_matrix = []
+                for row in context.object.data.bones[child.name].matrix_local:
+                    flattened_matrix.extend(row)
+                child_entry.matrix = flattened_matrix
+                
+                process_child_bones(child, parent_entry)
+        
+        # Find and copy spring groups for selected bones
+        for bone in context.selected_pose_bones:
+            if bone.name in spring_groups:
+                sg = data.spring_groups[spring_groups.index(bone.name)]
+                entry = buffer.entries.add()
+                entry.bone_name = bone.name
+                flattened_matrix = []
+                for row in context.object.data.bones[bone.name].matrix_local:
+                    flattened_matrix.extend(row)
+                entry.matrix = flattened_matrix
+                entry.dyn1 = sg.dyn1
+                entry.dyn2 = sg.dyn2
+                entry.dyn3 = sg.dyn3
+                entry.dyn4 = sg.dyn4
+                entry.maintain_shape = sg.maintain_shape
+                
+                # Check if bone has children
+                entry.has_children = bool(bone.children)
+                
+                parent_name = bone.parent.name if bone.parent else ""
+                entry.parent_name = parent_name
+                
+                
+                process_child_bones(bone, entry)
+                self.report({'INFO'}, f"Copied Spring Bone ({bone.name})")
+                
+                #check if this bone is attached to a collision
+                if buffer.copy_collidors:
+                    for col in data.collision_spheres:
+                        if not col.attach_groups or len(col.attached_groups) < 1:
+                            continue
+                        
+                           
+                        for ag in col.attached_groups:
+                            if ag.bone_spring == bone.name:
+                                collidor = buffer.collidors.add()
+                                collidor.collidor_parent = col.bone_collision
+                                collidor.collidor_offset_x = col.offset_x
+                                collidor.collidor_offset_y = col.offset_y
+                                collidor.collidor_offset_z = col.offset_z
+                                collidor.collidor_scale_x = col.scale_x
+                                collidor.collidor_scale_y = col.scale_y
+                                collidor.collidor_scale_z = col.scale_z
+                                collidor.collidor_attach_groups = col.attach_groups
+                                collidor.collidor_attached_count = col.attached_count
+                                for ag in col.attached_groups:
+                                    collidor.collidor_attached_groups.add().value = ag.bone_spring
+                                
+                                self.report({'INFO'}, f"Copied Collidor ({col.bone_collision})")
+                                break
+                
+        return {'FINISHED'}
+
+    
+
+class XFBIN_OT_DynamicBonesExtendedPaste(bpy.types.Operator):
+    bl_idname = "xfbin.dynamic_bones_extended_paste"
+    bl_label = "Paste Dynamic Bone"
+    bl_description = "Paste dynamic bone settings from buffer"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    @classmethod
+    def poll(cls, context):
+        return (context.mode == 'POSE' and context.object.type == 'ARMATURE' and
+                len(context.scene.xfbin_dynamics_bone_buffer.entries) > 0)
+
+
+    def execute(self, context):
+        data: DynamicsPropertyGroup = context.object.xfbin_dynamics_data
+        buffer = context.scene.xfbin_dynamics_bone_buffer
+        
+        spring_groups = [sg.bone_spring for sg in data.spring_groups]
+        
+        bone_names = [bone.name for bone in context.object.pose.bones]
+        
+        def replace_bone_name(name):
+            if buffer.rename_bones:
+                return name.replace(buffer.source_id, buffer.target_id)
+            elif buffer.add_prefix:
+                return f"{buffer.target_id}{name}"
+            return name
+        
+        # create or update spring groups
+        
+        for entry in buffer.entries:
+            # Create new bone
+            sg = data.spring_groups.add()
+            sg.bone_spring = sg.name = replace_bone_name(entry.bone_name)
+            sg.dyn1 = entry.dyn1
+            sg.dyn2 = entry.dyn2
+            sg.dyn3 = entry.dyn3
+            sg.dyn4 = entry.dyn4
+            sg.maintain_shape = entry.maintain_shape
+            
+            if buffer.copy_bones:
+                # create the bone and its children
+                bpy.ops.object.mode_set(mode='EDIT')
+                bone = context.object.data.edit_bones.new(replace_bone_name(entry.bone_name))
+                bone.matrix = Matrix((entry.matrix[:4], entry.matrix[4:8], entry.matrix[8:12], entry.matrix[12:]))
+                bone.tail += Vector((0, 0.01, 0))
+                
+                bone.parent = context.object.data.edit_bones.get(replace_bone_name(entry.parent_name))
+                                
+                for child in entry.children:
+                    child_name = child.bone_name.replace(buffer.source_id, buffer.target_id) if buffer.rename_bones else child.bone_name
+                    child_bone = context.object.data.edit_bones.new(child_name)
+                    child_bone.parent = context.object.data.edit_bones.get(replace_bone_name(child.parent_name))
+                    child_bone.matrix = Matrix((child.matrix[:4], child.matrix[4:8], child.matrix[8:12], child.matrix[12:]))
+                    child_bone.tail += Vector((0, 0.01, 0))
+                    
+                bpy.ops.object.mode_set(mode='POSE')
+                
+            self.report({'INFO'}, f"Pasted Spring Bone ({entry.bone_name})")
+            
+            
+        hashed_collision_groups = {}
+        if buffer.copy_collidors:
+            for collidor in buffer.collidors:
+                
+                #create a hash for the collidor
+                hash_string = f'{collidor.collidor_parent}_{collidor.collidor_offset_x}_{collidor.collidor_offset_y}_{collidor.collidor_offset_z}'
+                hash_string += f'_{collidor.collidor_scale_x}_{collidor.collidor_scale_y}_{collidor.collidor_scale_z}'
+                hash_string += f'_{collidor.collidor_attach_groups}_{collidor.collidor_attached_count}'
+                for ag in collidor.collidor_attached_groups:
+                    hash_string += f'_{ag.value}'
+                
+                crc32hash = crc32(hash_string.encode())
+                if crc32hash in hashed_collision_groups:
+                    continue
+                else:
+                    hashed_collision_groups[crc32hash] = True
+                
+                    col = data.collision_spheres.add()
+                    col.bone_collision = replace_bone_name(collidor.collidor_parent)
+                    col.offset_x = collidor.collidor_offset_x
+                    col.offset_y = collidor.collidor_offset_y
+                    col.offset_z = collidor.collidor_offset_z
+                    col.scale_x = collidor.collidor_scale_x
+                    col.scale_y = collidor.collidor_scale_y
+                    col.scale_z = collidor.collidor_scale_z
+                    col.attach_groups = collidor.collidor_attach_groups
+                    col.attached_count = collidor.collidor_attached_count
+                    for i, ag in enumerate(collidor.collidor_attached_groups):
+                        col.attached_groups[i].bone_spring = col.attached_groups[i].name = replace_bone_name(ag.value)
+        
+        return {'FINISHED'}
+
+
+class XFBIN_OT_DynamicsSourceTargetHelp(bpy.types.Operator):
+    bl_idname = "xfbin.source_target_help"
+    bl_label = ""
+    bl_description = "Display help information"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="Rename Dynamic Bones: Uses the target ID to replace the source ID.")
+        layout.label(text="Copy Bones: Copies the bones from this armature to another armature.")
+        layout.label(text="Source ID: The bone ID to replace, e.g. '1nrt00t0'.")
+        layout.label(text="Target ID: The bone ID to replace with, e.g. '1ssk00t0'.")
+        layout.label(text="Example: '1nrt00t0 sleeve' -> '1ssk00t0 sleeve'.")
+        
+    def invoke(self, context, event):
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self, width=600)
+    
+    def execute(self, context):
+        return {'FINISHED'}
+
 
 dynamics_chunks_property_groups = (
     SpringGroupsPropertyGroup,
     CollisionSpheresPropertyGroup,
     DynamicsPropertyGroup,
+    DynamicBoneChild,
+    DynamicBoneBufferEntry,
+    DynamicsCollidorBufferEntry,
+    XfbinDynamicsBoneBuffer,
     XfbinDynamicsClipboardPropertyGroup
 )
 
@@ -1127,6 +1487,11 @@ dynamics_chunks_classes = (
     XFBIN_CollisionGroup_OT_Paste,
     DynamicsPropertyPanel,
     update_dynamics,
-    SpringGroupSelectBone,
+    XFBIN_OT_SelectDynamicBone,
+    XFBIN_OT_SelectAllDynamicBones,
+    XFBIN_OT_CopySpringBoneSettings,
+    XFBIN_OT_DynamicBonesExtendedCopy,
+    XFBIN_OT_DynamicBonesExtendedPaste,
+    XFBIN_OT_DynamicsSourceTargetHelp,
     CollisionsLiveEdit
 )

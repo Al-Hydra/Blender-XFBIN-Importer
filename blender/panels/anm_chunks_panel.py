@@ -26,6 +26,215 @@ class XFBIN_UL_ANM_CLUMP(UIList):
             layout.label(text="", icon_value=icon)
 
 
+#anm panels buttons
+
+class XFBIN_OT_ANM_BUTTON_ADD(bpy.types.Operator):
+    bl_idname = 'xfbin.anm_button_add'
+    bl_label = 'Add'
+    bl_description = 'Add to list'
+    
+    add_option: bpy.props.EnumProperty(
+        items=[('amm_chunks', 'anm_chunks', ''),
+                ('anm_clumps', 'anm_clumps', ''),
+                ('cameras', 'cameras', ''),
+                ('lightdircs', 'lightdircs', ''),
+                ('lightpoints', 'lightpoints', ''),
+                ('ambients', 'ambients', ''),
+                ('models', 'models', ''),
+                ('bones', 'bones', ''),
+                ('materials', 'materials', '')],
+    )
+
+    #universal function to add to list
+    def add_to_list(self, context, data, prop_name, index):
+        item = getattr(data, prop_name)
+        item.add()
+        
+        #set index to the last item
+        setattr(data, index, len(item) - 1)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        anm_obj = context.object
+        data: AnmChunksListPropertyGroup = anm_obj.xfbin_anm_chunks_data
+        
+        if self.add_option == 'anm_chunks':
+            return self.add_to_list(context, data, 'anm_chunks', 'anm_chunk_index')
+        elif self.add_option == 'anm_clumps':
+            return self.add_to_list(context, data.anm_chunks[data.anm_chunk_index], 'anm_clumps', 'clump_index')
+        elif self.add_option == 'cameras':
+            return self.add_to_list(context, data.anm_chunks[data.anm_chunk_index], 'cameras', 'camera_index')
+        elif self.add_option == 'lightdircs':
+            return self.add_to_list(context, data.anm_chunks[data.anm_chunk_index], 'lightdircs', 'lightdirc_index')
+        elif self.add_option == 'lightpoints':
+            return self.add_to_list(context, data.anm_chunks[data.anm_chunk_index], 'lightpoints', 'lightpoint_index')
+        elif self.add_option == 'ambients':
+            return self.add_to_list(context, data.anm_chunks[data.anm_chunk_index], 'ambients', 'ambient_index')
+        elif self.add_option == 'models':
+            return self.add_to_list(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'models', 'model_index')
+        elif self.add_option == 'bones':
+            return self.add_to_list(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'bones', 'bone_index')
+        elif self.add_option == 'materials':
+            return self.add_to_list(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'materials', 'material_index')
+        return {'FINISHED'}
+
+
+class XFBIN_OT_ANM_BUTTON_REMOVE(bpy.types.Operator):
+    bl_idname = 'xfbin.anm_button_remove'
+    bl_label = 'Remove'
+    bl_description = 'Remove from list'
+    
+    remove_option: bpy.props.EnumProperty(
+        items=[('anm_chunks', 'anm_chunks', ''),
+                ('anm_clumps', 'anm_clumps', ''),
+                ('cameras', 'cameras', ''),
+                ('lightdircs', 'lightdircs', ''),
+                ('lightpoints', 'lightpoints', ''),
+                ('ambients', 'ambients', ''),
+                ('models', 'models', ''),
+                ('bones', 'bones', ''),
+                ('materials', 'materials', '')],
+    )
+
+    #universal function to remove from list
+    def remove_from_list(self, context, data, prop_name, index):
+        item = getattr(data, prop_name)
+        item.remove(getattr(data, index))
+        setattr(data, index, max(0, min(getattr(data, index), len(item) - 1)) )
+       
+        return {'FINISHED'}
+
+
+    def execute(self, context):
+        anm_obj = context.object
+        data: AnmChunksListPropertyGroup = anm_obj.xfbin_anm_chunks_data
+        
+        if self.remove_option == 'anm_chunks':
+            return self.remove_from_list(context, data, 'anm_chunks', 'anm_chunk_index')
+        elif self.remove_option == 'anm_clumps':
+            return self.remove_from_list(context, data.anm_chunks[data.anm_chunk_index], 'anm_clumps', 'clump_index')
+        elif self.remove_option == 'cameras':
+            return self.remove_from_list(context, data.anm_chunks[data.anm_chunk_index], 'cameras', 'camera_index')
+        elif self.remove_option == 'lightdircs':
+            return self.remove_from_list(context, data.anm_chunks[data.anm_chunk_index], 'lightdircs', 'lightdirc_index')
+        elif self.remove_option == 'lightpoints':
+            return self.remove_from_list(context, data.anm_chunks[data.anm_chunk_index], 'lightpoints', 'lightpoint_index')
+        elif self.remove_option == 'ambients':
+            return self.remove_from_list(context, data.anm_chunks[data.anm_chunk_index], 'ambients', 'ambient_index')
+        elif self.remove_option == 'models':
+            return self.remove_from_list(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'models', 'model_index')
+        elif self.remove_option == 'bones':
+            return self.remove_from_list(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'bones', 'bone_index')
+        elif self.remove_option == 'materials':
+            return self.remove_from_list(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'materials', 'material_index')
+        return {'FINISHED'}
+
+
+class XFBIN_OT_ANM_BUTTON_MOVE_UP(bpy.types.Operator):
+    bl_idname = 'xfbin.anm_button_move_up'
+    bl_label = 'Move Up'
+    bl_description = 'Move item up'
+
+    move_option: bpy.props.EnumProperty(
+        items=[('anm_chunks', 'anm_chunks', ''),
+                ('anm_clumps', 'anm_clumps', ''),
+                ('cameras', 'cameras', ''),
+                ('lightdircs', 'lightdircs', ''),
+                ('lightpoints', 'lightpoints', ''),
+                ('ambients', 'ambients', ''),
+                ('models', 'models', ''),
+                ('bones', 'bones', ''),
+                ('materials', 'materials', '')],
+    )
+
+    #universal function to move item up
+    def move_item_up(self, context, data, prop_name, index):
+        item = getattr(data, prop_name)
+        item_index = getattr(data, index)
+        if item_index > 0:
+            item.move(item_index, item_index - 1)
+            setattr(data, index, item_index - 1)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        anm_obj = context.object
+        data: AnmChunksListPropertyGroup = anm_obj.xfbin_anm_chunks_data
+        
+        if self.move_option == 'anm_chunks':
+            return self.move_item_up(context, data, 'anm_chunks', 'anm_chunk_index')
+        elif self.move_option == 'anm_clumps':
+            return self.move_item_up(context, data.anm_chunks[data.anm_chunk_index], 'anm_clumps', 'clump_index')
+        elif self.move_option == 'cameras':
+            return self.move_item_up(context, data.anm_chunks[data.anm_chunk_index], 'cameras', 'camera_index')
+        elif self.move_option == 'lightdircs':
+            return self.move_item_up(context, data.anm_chunks[data.anm_chunk_index], 'lightdircs', 'lightdirc_index')
+        elif self.move_option == 'lightpoints':
+            return self.move_item_up(context, data.anm_chunks[data.anm_chunk_index], 'lightpoints', 'lightpoint_index')
+        elif self.move_option == 'ambients':
+            return self.move_item_up(context, data.anm_chunks[data.anm_chunk_index], 'ambients', 'ambient_index')
+        elif self.move_option == 'models':
+            return self.move_item_up(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'models', 'model_index')
+        elif self.move_option == 'bones':
+            return self.move_item_up(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'bones', 'bone_index')
+        elif self.move_option == 'materials':
+            return self.move_item_up(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'materials', 'material_index')
+        return {'FINISHED'}
+    
+
+class XFBIN_OT_ANM_BUTTON_MOVE_DOWN(bpy.types.Operator):
+    bl_idname = 'xfbin.anm_button_move_down'
+    bl_label = 'Move Down'
+    bl_description = 'Move item down'
+
+    move_option: bpy.props.EnumProperty(
+        items=[('anm_chunks', 'anm_chunks', ''),
+                ('anm_clumps', 'anm_clumps', ''),
+                ('cameras', 'cameras', ''),
+                ('lightdircs', 'lightdircs', ''),
+                ('lightpoints', 'lightpoints', ''),
+                ('ambients', 'ambients', ''),
+                ('models', 'models', ''),
+                ('bones', 'bones', ''),
+                ('materials', 'materials', '')],
+    )
+
+    #universal function to move item down
+    def move_item_down(self, context, data, prop_name, index):
+        item = getattr(data, prop_name)
+        item_index = getattr(data, index)
+        if item_index < len(item) - 1:
+            item.move(item_index, item_index + 1)
+            #get the index variable name
+            setattr(data, index, item_index + 1)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        anm_obj = context.object
+        data: AnmChunksListPropertyGroup = anm_obj.xfbin_anm_chunks_data
+        
+        if self.move_option == 'anm_chunks':
+            return self.move_item_down(context, data, 'anm_chunks', 'anm_chunk_index')
+        elif self.move_option == 'anm_clumps':
+            return self.move_item_down(context, data.anm_chunks[data.anm_chunk_index], 'anm_clumps', 'clump_index')
+        elif self.move_option == 'cameras':
+            return self.move_item_down(context, data.anm_chunks[data.anm_chunk_index], 'cameras', 'camera_index')
+        elif self.move_option == 'lightdircs':
+            return self.move_item_down(context, data.anm_chunks[data.anm_chunk_index], 'lightdircs', 'lightdirc_index')
+        elif self.move_option == 'lightpoints':
+            return self.move_item_down(context, data.anm_chunks[data.anm_chunk_index], 'lightpoints', 'lightpoint_index')
+        elif self.move_option == 'ambients':
+            return self.move_item_down(context, data.anm_chunks[data.anm_chunk_index], 'ambients', 'ambient_index')
+        elif self.move_option == 'models':
+            return self.move_item_down(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'models', 'model_index')
+        elif self.move_option == 'bones':
+            return self.move_item_down(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'bones', 'bone_index')
+        elif self.move_option == 'materials':
+            return self.move_item_down(context, data.anm_chunks[data.anm_chunk_index].anm_clumps[data.anm_chunk_index], 'materials', 'material_index')
+        return {'FINISHED'}
+    
+
+        
+
 class AnmClumpBonePropertyGroup(PropertyGroup):
     name: StringProperty()
     ref_name: StringProperty()
@@ -365,9 +574,16 @@ class AnmChunksPropertyPanel(Panel):
             row.label(text="Name:")
             row.label(text="Referenced Name:")
             
-            #draw ui list
             row = clump_box.row()
+
+            col = row.column()
+            row = col.row()
             row.template_list('XFBIN_UL_ANM_CLUMP', 'Clumps', anm, 'anm_clumps', anm, 'clump_index')
+            col = row.column()
+            col.operator('xfbin.anm_button_add', text='', icon='ADD').add_option = 'anm_clumps'
+            col.operator('xfbin.anm_button_remove', text='', icon='REMOVE').remove_option = 'anm_clumps'
+            col.operator('xfbin.anm_button_move_up', text='', icon='TRIA_UP').move_option = 'anm_clumps'
+            col.operator('xfbin.anm_button_move_down', text='', icon='TRIA_DOWN').move_option = 'anm_clumps'
 
             if len(anm.anm_clumps) > 0:
                 clump = anm.anm_clumps[anm.clump_index]
@@ -460,7 +676,7 @@ class AnmChunksPropertyPanel(Panel):
                 draw_xfbin_list(lightdirc_box, 6, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightdircs', 'lightdirc_index')
 
                 box = lightdirc_box.box()
-                box.prop_search(anm.lightdircs[anm.lightdirc_index], 'name', bpy.data, 'lights', text="LightDirc", icon='LIGHT')
+                box.prop_search(anm.lightdircs[anm.lightdirc_index], 'name', bpy.data, 'objects', text="LightDirc", icon='LIGHT')
             else:
                 draw_xfbin_list(lightdirc_box, 6, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightdircs', 'lightdirc_index')
 
@@ -477,7 +693,7 @@ class AnmChunksPropertyPanel(Panel):
                 draw_xfbin_list(lightpoint_box, 7, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightpoints', 'lightpoint_index')
 
                 box = lightpoint_box.box()
-                box.prop_search(anm.lightpoints[anm.lightpoint_index], 'name', bpy.data, 'lights', text="LightPoint", icon='LIGHT')
+                box.prop_search(anm.lightpoints[anm.lightpoint_index], 'name', bpy.data, 'objects', text="LightPoint", icon='LIGHT')
             else:
                 draw_xfbin_list(lightpoint_box, 7, anm, f'xfbin_anm_chunks_data.anm_chunks[{anm_index}]', 'lightpoints', 'lightpoint_index')
 
@@ -565,6 +781,10 @@ anm_chunks_property_groups = (
 anm_chunks_classes = (
     *anm_chunks_property_groups,
     AnmChunksPropertyPanel,
+    XFBIN_OT_ANM_BUTTON_ADD,
+    XFBIN_OT_ANM_BUTTON_REMOVE,
+    XFBIN_OT_ANM_BUTTON_MOVE_UP,
+    XFBIN_OT_ANM_BUTTON_MOVE_DOWN,
     XFBIN_UL_ANM_CLUMP,
     PlayAnimation
 )

@@ -100,6 +100,7 @@ class XfbinMaterialTexturesPropertyGroup(PropertyGroup):
 
 
     name: StringProperty(default='new_texture')
+    
     texture: bpy.props.PointerProperty(
         type=XfbinTextureChunkPropertyGroup,
         update=update_name)
@@ -417,10 +418,14 @@ class XFBIN_MatParam_OT_Paste(bpy.types.Operator):
 
         if len(shader.shader_params) > 0:
             newParam: NUD_ShaderParamPropertyGroup = shader.shader_params.add()
-            newParam.init_data(clipboard.shader_param_clipboard)
+            
+            for k, v in clipboard.shader_param_clipboard.items():
+                newParam[k] = v
 
             self.report({'INFO'}, f'Param ({clipboard.shader_param_clipboard.name}) from clipboard to ({obj.active_material.name})')
         
+        #set index
+        shader.NUD_ShaderParam_index = len(shader.shader_params) - 1
 
         return {'FINISHED'}
     
@@ -454,7 +459,7 @@ class NUD_ShaderParamPropertyGroup(PropertyGroup):
     
     def init_copy(self, param):
         self.name = param.name
-
+        self.values.clear()
         for i in range(param.count):
             v = self.values.add()
             v.value = param.values[i].value
@@ -606,8 +611,28 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
     blendRate: FloatVectorProperty(name='', size=2, default=(0.0, 0.0))
     fallOff: FloatProperty(name='fallOff')
     outlineID: FloatProperty(name='outlineID', default=1)
+    
+    default_alpha: FloatProperty(name='Default Alpha', default=0)
+    default_glare: FloatProperty(name='Default Glare', default=0)
+    default_UV0: BoolProperty(name='Default UV0', default=True)
+    default_UV1: BoolProperty(name='Default UV1')
+    default_UV2: BoolProperty(name='Default UV2')
+    default_UV3: BoolProperty(name='Default UV3')
+    default_Blend: BoolProperty(name='Default Blend Rate')
+    default_useFallOff: BoolProperty(name='Default fallOff')
+    default_useOutlineID: BoolProperty(name='Default outlineID')
+    
+    default_uvOffset0: FloatVectorProperty(name='Default uvOffset0', size=4, default=(0.0, 0.0, 1.0, 1.0))
+    default_uvOffset1: FloatVectorProperty(name='Default uvOffset1', size=4, default=(0.0, 0.0, 1.0, 1.0))
+    default_uvOffset2: FloatVectorProperty(name='Default uvOffset2', size=4, default=(0.0, 0.0, 1.0, 1.0))
+    default_uvOffset3: FloatVectorProperty(name='Default uvOffset3', size=4, default=(0.0, 0.0, 1.0, 1.0))
+    default_blendRate: FloatVectorProperty(name='Default Blend Rate', size=2, default=(0.0, 0.0))
+    default_fallOff: FloatProperty(name='Default fallOff')
+    default_outlineID: FloatProperty(name='Default outlineID', default=1)
+    
 
     texGroupsCount: IntProperty(name='Texture Groups Count', min=0, max=4, default=1)
+    
 
     '''texture_groups: CollectionProperty(
         type=TextureGroupPropertyGroup,
@@ -655,28 +680,45 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
     def update_name(self):
         self.name = self.material_name
     
-    def __init__(self):
-        self.material_name = ""
-        self.alpha = 0.0
-        self.glare = 0.0
-
-        self.flags = 0
+    def reset_to_default(self):
+        self.alpha = self.default_alpha
+        self.glare = self.default_glare
         
-        self.UV0 = False
-        self.uvOffset0 = (0.0, 0.0, 1.0, 1.0)
-        self.UV1 = False
-        self.uvOffset1 = (0.0, 0.0, 1.0, 1.0)
-        self.UV2 = False
-        self.uvOffset2 = (0.0, 0.0, 1.0, 1.0)
-        self.UV3 = False
-        self.uvOffset3 = (0.0, 0.0, 1.0, 1.0)
-        self.Blend = False
-        self.blendRate[0] = 0.0
-        self.blendRate[1] = 0.0
-        self.useFallOff = False
-        self.fallOff = 0.0
-        self.useOutlineID = False
-        self.outlineID = 0.0
+        self.UV0 = self.default_UV0
+        self.uvOffset0 = self.default_uvOffset0
+        self.UV1 = self.default_UV1
+        self.uvOffset1 = self.default_uvOffset1
+        self.UV2 = self.default_UV2
+        self.uvOffset2 = self.default_uvOffset2
+        self.UV3 = self.default_UV3
+        self.uvOffset3 = self.default_uvOffset3
+        self.Blend = self.default_Blend
+        self.blendRate = self.default_blendRate
+        self.useFallOff = self.default_useFallOff
+        self.fallOff = self.default_fallOff
+        self.useOutlineID = self.default_useOutlineID
+        self.outlineID = self.default_outlineID
+
+    
+    def set_as_default(self):
+        self.default_alpha = self.alpha
+        self.default_glare = self.glare
+        
+        self.default_UV0 = self.UV0
+        self.default_uvOffset0 = self.uvOffset0
+        self.default_UV1 = self.UV1
+        self.default_uvOffset1 = self.uvOffset1
+        self.default_UV2 = self.UV2
+        self.default_uvOffset2 = self.uvOffset2
+        self.default_UV3 = self.UV3
+        self.default_uvOffset3 = self.uvOffset3
+        self.default_Blend = self.Blend
+        self.default_blendRate = self.blendRate
+        self.default_useFallOff = self.useFallOff
+        self.default_fallOff = self.fallOff
+        self.default_useOutlineID = self.useOutlineID
+        self.default_outlineID = self.outlineID
+        
 
 
     def init_data(self, material: NuccChunkMaterial, mesh, mesh_flags):
@@ -689,27 +731,27 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
         self.flags = material.flags
         
         if material.flags & 0x01:
-            self.UV0 = True
-            self.uvOffset0 = material.UV0
+            self.UV0 = self.default_UV0 = True
+            self.uvOffset0 = self.default_uvOffset0 = material.UV0
         if material.flags & 0x02:
-            self.UV1 = True
-            self.uvOffset1 = material.UV1
+            self.UV1 = self.default_UV1 = True
+            self.uvOffset1 = self.default_uvOffset1 = material.UV1
         if material.flags & 0x04:
-            self.UV2 = True
-            self.uvOffset2 = material.UV2
+            self.UV2 = self.default_UV2 = True
+            self.uvOffset2 = self.default_uvOffset2 = material.UV2
         if material.flags & 0x08:
-            self.UV3 = True
-            self.uvOffset3 = material.UV3
+            self.UV3 = self.default_UV3 = True
+            self.uvOffset3 = self.default_uvOffset3 = material.UV3
         if material.flags & 0x10:
-            self.Blend = True
-            self.blendRate[0] = material.BlendRate
-            self.blendRate[1] = material.BlendType
+            self.Blend = self.default_Blend = True
+            self.blendRate[0] = self.default_blendRate[0] = material.BlendRate
+            self.blendRate[1] = self.default_blendRate[1] = material.BlendRate
         if material.flags & 0x20:
-            self.useFallOff = True
-            self.fallOff = material.fallOff
+            self.useFallOff = self.default_useFallOff = True
+            self.fallOff = self.default_fallOff = material.fallOff
         if material.flags & 0x40:
-            self.useOutlineID = True
-            self.outlineID = material.outlineID
+            self.useOutlineID = self.default_useOutlineID = True
+            self.outlineID = self.default_outlineID = material.outlineID
         
         '''self.texture_groups.clear()
         for group in material.texture_groups:
@@ -869,11 +911,11 @@ class XfbinMaterialPropertyPanel(Panel):
         row = layout.row()
         row.operator('xfbin_mat.copy', icon='COPYDOWN', text='Copy')
         row.operator('xfbin_mat.paste', icon='PASTEDOWN', text='Paste')
-
+        
         if obj.active_material and obj.active_material.xfbin_material_data:
             material: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
             box = layout.box()
-
+            
             row = box.row()
             row.prop(material, 'alpha')
             row.prop(material, 'glare')
@@ -918,6 +960,11 @@ class XfbinMaterialPropertyPanel(Panel):
                 row.prop(material, 'outlineID')
 
             row.prop(material, 'texGroupsCount')
+            
+            row = box.row()
+
+            row.operator('xfbin_mat.reset_to_default', icon='FILE_REFRESH')
+            row.operator('xfbin_mat.set_as_default', icon='FILE_TICK')
             
 
 class NUD_ShaderPropertyPanel(Panel):
@@ -1651,6 +1698,32 @@ class XFBIN_Scene_OT_CreatePointLight(bpy.types.Operator):
 
         return {'FINISHED'}
 
+
+class XFBIN_Mat_OT_ResetToDefault(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.reset_to_default'
+    bl_label = 'Reset to Default Values'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        mat.reset_to_default()
+
+        return {'FINISHED'}
+    
+    
+class XFBIN_Mat_OT_SetAsDefault(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.set_as_default'
+    bl_label = 'Set Current Values as Default'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        mat.set_as_default()
+
+        return {'FINISHED'}
+
 material_property_groups = (
     #NutSubTexturePropertyGroup,
     #MaterialNutTexturePropertyGroup,
@@ -1669,6 +1742,8 @@ material_classes = (
     XFBIN_UL_MatTextures,
     XFBIN_UL_MatShaders,
     XFBIN_UL_MatParams,
+    XFBIN_Mat_OT_ResetToDefault,
+    XFBIN_Mat_OT_SetAsDefault,
     XFBIN_Material_OT_Copy,
     XFBIN_Material_OT_Paste,
     XFBIN_MatTexture_OT_Add,
