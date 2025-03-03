@@ -996,7 +996,7 @@ def _07_F00D(self, meshmat, xfbin_mat, matname, mesh, nodegrp = '07F00D'):
 		material.blend_method = 'CLIP'
 	elif meshmat.sourceFactor == 1 or meshmat.sourceFactor == 5:
 		material.blend_method = 'BLEND'
-	material.shadow_method = 'NONE'
+	#material.shadow_method = 'NONE'
 	
 	# Culling Mode
 	if meshmat.cullMode == 1028 or meshmat.cullMode == 1029:
@@ -1188,7 +1188,7 @@ def _07_F010(self, meshmat,  xfbin_mat, matname, mesh, nodegrp = '07F020'):
 		material.blend_method = 'CLIP'
 	elif meshmat.sourceFactor == 1 or meshmat.sourceFactor == 5:
 		material.blend_method = 'BLEND'
-	material.shadow_method = 'NONE'
+	#material.shadow_method = 'NONE'
 	
 	# Culling Mode
 	if meshmat.cullMode == 1028 or meshmat.cullMode == 1029:
@@ -1587,7 +1587,7 @@ def _01_F8_01(self, meshmat, xfbin_mat, matname, mesh, nodegrp = '01F801'):
 		material.blend_method = 'CLIP'
 	elif meshmat.sourceFactor == 1 or meshmat.sourceFactor == 5:
 		material.blend_method = 'BLEND'
-	material.shadow_method = 'NONE'
+	#material.shadow_method = 'NONE'
 	
 	# Culling Mode
 	if meshmat.cullMode == 1028 or meshmat.cullMode == 1029:
@@ -1750,7 +1750,7 @@ def _01_F8_00(self, meshmat, xfbin_mat, matname, mesh, nodegrp = '01F801'):
 		material.blend_method = 'CLIP'
 	elif meshmat.sourceFactor == 1 or meshmat.sourceFactor == 5:
 		material.blend_method = 'BLEND'
-	material.shadow_method = 'NONE'
+	#material.shadow_method = 'NONE'
 	
 	# Culling Mode
 	if meshmat.cullMode == 1028 or meshmat.cullMode == 1029:
@@ -1891,7 +1891,7 @@ def _01_F1_30(self, meshmat, xfbin_mat, matname, mesh, nodegrp = '01F130'):
 		material.blend_method = 'CLIP'
 	elif meshmat.sourceFactor == 1 or meshmat.sourceFactor == 5:
 		material.blend_method = 'BLEND'
-	material.shadow_method = 'NONE'
+	#material.shadow_method = 'NONE'
 	
 	# Culling Mode
 	if meshmat.cullMode == 1028 or meshmat.cullMode == 1029:
@@ -1959,7 +1959,7 @@ def _19_F0_0F(self, meshmat, xfbin_mat, matname, mesh, nodegrp = '19F00F'):
 		material.blend_method = 'CLIP'
 	elif meshmat.sourceFactor == 1 or meshmat.sourceFactor == 5:
 		material.blend_method = 'BLEND'
-	material.shadow_method = 'NONE'
+	#material.shadow_method = 'NONE'
 	
 	# Culling Mode
 	if meshmat.cullMode == 1028 or meshmat.cullMode == 1029:
@@ -2342,7 +2342,7 @@ def default_mat(self, mesh, xfbin_mat, mesh_flags, nodegrp = 'Default'):
 		material.blend_method = 'CLIP'
 	elif meshmat.sourceFactor == 1 or meshmat.sourceFactor == 5:
 		material.blend_method = 'BLEND'
-	material.shadow_method = 'NONE'
+	#material.shadow_method = 'NONE'
 	
 	# Culling Mode
 	if meshmat.cullMode == 1028 or meshmat.cullMode == 1029:
@@ -2429,7 +2429,7 @@ def F001(self, meshmat, xfbin_mat, matname, mesh, nodegrp = 'F001'):
 
 		# Alpha Mode
 		material.blend_method = 'CLIP'
-		material.shadow_method = 'NONE'
+		#material.shadow_method = 'NONE'
 		
 		# Culling Mode
 		material.use_backface_culling = True
@@ -2499,7 +2499,7 @@ def collision_mat(name):
 	material = bpy.data.materials.new(name)
 	material.use_nodes = True
 	material.blend_method = 'BLEND'
-	material.shadow_method = 'NONE'
+	#material.shadow_method = 'NONE'
 	material.use_backface_culling = True
 	material.node_tree.nodes.clear()
 

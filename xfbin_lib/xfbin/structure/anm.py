@@ -19,8 +19,7 @@ class AnmBone:
         self.chunk = None
         self.parent = None
         self.children = list()
-        self.anm_entry = None
-
+        self.curves = list()
 class AnmMaterial:
     name: str
     chunk: 'NuccChunk'
@@ -31,7 +30,7 @@ class AnmMaterial:
         self.name = ''
         self.referenced_name = ''
         self.chunk = None
-        self.anm_entry = None
+        self.curves = list()
 
 
 class AnmModel:
@@ -72,6 +71,7 @@ class AnmClump:
                     material.name = bone_ref.name
                     material.referenced_name = bone_ref.name
                     material.chunk = bone_ref
+                    
                     
                     self.materials.append(material)
                 
@@ -197,7 +197,8 @@ class AnmEntry:
         
         if br_anm_entry.entry_format == AnmEntryFormat.BONE:
             self.clump: AnmClump = clumps[br_anm_entry.clump_index]
-            self.bone = self.clump.children[br_anm_entry.bone_index]
+            clump_child = self.clump.children[br_anm_entry.bone_index]
+            self.bone = self.clump.bones[br_anm_entry.bone_index]
             self.bone.anm_entry = self
             self.name = self.bone.name
             self.chunk = self.bone
@@ -231,7 +232,6 @@ class AnmEntry:
     
 
         # Sort the curves based on curve index (might not actually be necessary)
-        #curves = sorted(zip(br_anm_entry.curve_headers, br_anm_entry.curves), key=lambda x: x[0].curve_index)
         curves = list(zip(br_anm_entry.curve_headers, br_anm_entry.curves))
 
         self.curves = list()
@@ -264,29 +264,10 @@ class AnmEntry:
                                 "V3_ScaleY": [],
                                 "unknown": []}
         
-        self.curves2 = []
         
-        if self.entry_format == AnmEntryFormat.BONE:
-            '''for i, cur in enumerate(('location', 'rotation', 'scale', 'toggled')):
-                curve = create_anm_curve(AnmDataPath[cur.upper()], curves[i][0].curve_format, curves[i][1], frame_size) if i < len(curves) else None
-                self.curves.append(curve)'''
-                #setattr(self, f'{cur}_curve', curve)
-            
-            
-            
-            self.curves = create_bone_curves(curves, frame_size)     
-            
-            #compare the two lists of curves
-            '''for curve1, curve2 in zip(self.curves, self.curves2):
-                for kf1, kf2 in zip(curve1.keyframes, curve2.keyframes):
-                    if kf1.frame != kf2.frame:
-                        print(f"Frame mismatch! {kf1.frame} != {kf2.frame}, {curve1.data_path}")
-                    if kf1.value != kf2.value:
-                        print(f"Value mismatch! {kf1.value} != {kf2.value}, {curve1.data_path}, {curve2.data_path}")'''
-                                        
-                    
-            
-            #print(self.curves2) 
+        if self.entry_format == AnmEntryFormat.BONE:            
+            self.bone.curves = self.curves = create_bone_curves(curves, frame_size)
+
                                      
         elif self.entry_format == AnmEntryFormat.CAMERA:
             self.curves = create_camera_curves(curves, frame_size)
@@ -298,27 +279,16 @@ class AnmEntry:
             self.curves = create_lightpoint_curves(curves, frame_size)
         
         elif self.entry_format == AnmEntryFormat.AMBIENT:
-            '''for i, cur in enumerate(('color', 'energy')):
-                curve = create_anm_curve(AnmDataPath[cur.upper()], curves[i][0].curve_format,
-                                         curves[i][1], frame_size) if i < len(curves) else None
-                if curve and cur == 'color':
-                    for kf in curve.keyframes:
-                        # We need to add an alpha value of 1 to the color curve
-                        color_value = list(kf.value) 
-                        color_value.append(1.0)
-                        kf.value = list(color_value)  
-                self.curves.append(curve)
-                setattr(self, f'{cur}_curve', curve)'''
-                
             self.curves = create_ambient_curves(curves, frame_size)
         
         elif self.entry_format == AnmEntryFormat.MATERIAL:
             self.curves = create_material_curves(curves, frame_size)
+            self.material.curves = self.curves
             
 
         else:
             print(f"Unknown entry format: {self.entry_format}")
-            self.curves = list()
+            #self.curves = list()
         
 
 

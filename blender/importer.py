@@ -1078,17 +1078,17 @@ class XfbinImporter:
                         arm_blender_mat[arm_bone.name] = arm_bone.matrix
                         arm_euler[arm_bone.name] = [math.radians(x) for x in arm_bone.get('orig_coords')[1]]
 
+                        #Set the rotation mode to quaternion
+                        pose_bone = arm_obj.pose.bones[arm_bone.name]
+                        pose_bone.rotation_mode = "QUATERNION"
                     
-                    #bpy.ops.object.mode_set(mode='POSE')
-                    for arm_bone in arm_obj.pose.bones:
-                        arm_bone.rotation_mode = "QUATERNION"
-                        
+
                 #bones
                 for bone in clump.bones:
                     group_name = action.groups.new(bone.name).name
 
-                    if bone.anm_entry is None:
-                        continue
+                    '''if bone.anm_entry is None:
+                        continue'''
 
 
 
@@ -1107,7 +1107,7 @@ class XfbinImporter:
                     
 
 
-                    for curve in bone.anm_entry.curves:
+                    for curve in bone.curves:
                         #if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
                         #    continue
 

@@ -1488,7 +1488,7 @@ class XfbinSceneManagerPropertyGroup(PropertyGroup):
     
     fog_density: FloatProperty(
         name='Fog Density',
-        default=100.0,
+        default=0.0,
         min=0.0,
         max=100.0,
         subtype='PERCENTAGE'
