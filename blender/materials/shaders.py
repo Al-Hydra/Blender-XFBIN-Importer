@@ -41,21 +41,9 @@ def F00A(self, mesh, xfbin_mat, mesh_flags):
 	if not bpy.data.images.get('celshade'):
 		celshade = bpy.data.images.load(f"{path}/celshade.png")
 		celshade.name = 'celshade'
-	
-	#set tex2 and 3 to use celshade
-	tex2_node = material.node_tree.nodes.get('celShade1')
-	tex2_node.image = bpy.data.images.get('celshade')
-	tex3_node = material.node_tree.nodes.get('celShade2')
-	tex3_node.image = bpy.data.images.get('celshade')
 
 	#find the shader node
 	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
-
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
 
 	#get material params from the mesh
 	meshmat = mesh.materials[0]

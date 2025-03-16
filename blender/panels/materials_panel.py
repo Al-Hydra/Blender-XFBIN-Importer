@@ -1465,6 +1465,29 @@ class XfbinSceneManagerPropertyGroup(PropertyGroup):
         size=3
     )
     
+    shade_color: FloatVectorProperty(
+        name='Shade Color',
+        default=(0.5, 0.5, 0.5, 0.0),
+        min=0.0,
+        max=1.0,
+        subtype='COLOR',
+        size=4
+    )
+    
+    stage_color: FloatVectorProperty(
+        name='Stage Color',
+        default=(1.0, 1.0, 1.0),
+        min=0.0,
+        max=1.0,
+        subtype='COLOR',
+        size=3
+    )
+    
+    use_stage_color: BoolProperty(
+        name='Use Stage Color',
+        default=False
+    )
+    
     fog_color: FloatVectorProperty(
         name='Fog Color',
         default=(0.0, 0.0, 0.0),
@@ -1588,6 +1611,15 @@ class XfbinSceneManagerPanel(Panel):
         row = fog_box.row()
         row.prop(xfbin_scene_manager, 'fog_density')
         row = box.row()
+        
+        shade_box = box.box()
+        row = shade_box.row()
+        row.label(text='Shade:')
+        row = shade_box.row()
+        row.prop(xfbin_scene_manager, 'shade_color', text='Shade Color')
+        row = shade_box.row()
+        row.prop(xfbin_scene_manager, 'use_stage_color', text='Use Stage Color')
+        row.prop(xfbin_scene_manager, 'stage_color', text='Stage Color')
         
         cpara_box = box.box()
         row = cpara_box.row()
