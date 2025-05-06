@@ -618,7 +618,7 @@ class XfbinImporter:
                 mesh_obj.parent_bone = mesh_bone.name
             
             # If we're not going to parent it, transform the mesh by the bone's matrix
-            if mesh_bone:                        
+            if mesh_bone and nucc_model.coord_chunk.node.matrix:                        
                 blender_mesh.transform(nucc_model.coord_chunk.node.matrix)
              
             #set active color

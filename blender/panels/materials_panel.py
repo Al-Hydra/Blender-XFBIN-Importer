@@ -835,21 +835,22 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
         self.NUTextures.clear()
         
         #for tg_index, tex_group in enumerate(material.texture_groups):
-        for tex_index, tex_chunk in enumerate(material.texture_groups[0].texture_chunks):
-            if bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(tex_chunk.name):
-                texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks[tex_chunk.name]
-            else:
-                #create a new texture chunk
-                texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.add()
-                texture.init_data(tex_chunk)
-            
-            nut = self.NUTextures.add()
-            nut.init_data(texture)
-            
-            #get the texture props from the first nud shader
-            nud_shader = self.NUD_Shaders[0]
-            props = nud_shader.shader_tex_props[tex_index]
-            nut.init_tex_props(props)      
+        if material.texture_groups:
+            for tex_index, tex_chunk in enumerate(material.texture_groups[0].texture_chunks):
+                if bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(tex_chunk.name):
+                    texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks[tex_chunk.name]
+                else:
+                    #create a new texture chunk
+                    texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.add()
+                    texture.init_data(tex_chunk)
+                
+                nut = self.NUTextures.add()
+                nut.init_data(texture)
+                
+                #get the texture props from the first nud shader
+                nud_shader = self.NUD_Shaders[0]
+                props = nud_shader.shader_tex_props[tex_index]
+                nut.init_tex_props(props)      
     
 
     def init_copy(self, matprop):

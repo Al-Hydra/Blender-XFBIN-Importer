@@ -84,7 +84,7 @@ class XFBIN_SpringGroup_OT_Copy(bpy.types.Operator):
         data: DynamicsPropertyGroup = context.object.xfbin_dynamics_data
         bpy.context.scene.xfbin_dynamics_clipboard.copy_spring_group(data.spring_groups[data.sg_index])
         #set the index to the last item in the list
-        data.sg_index = len(data.spring_groups) - 1
+        #data.sg_index = len(data.spring_groups) - 1
 
         return {'FINISHED'}
 
@@ -101,6 +101,7 @@ class XFBIN_SpringGroup_OT_Paste(bpy.types.Operator):
         sg = data.spring_groups.add()
         for k, v in bpy.context.scene.xfbin_dynamics_clipboard.spring_groups_clipboard.items():
             sg[k] = v
+        data.sg_index = len(data.spring_groups) - 1
         return {'FINISHED'}
 
 

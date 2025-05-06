@@ -22,6 +22,8 @@ def F00A(self, mesh, xfbin_mat, mesh_flags):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	NUTextures: XfbinMaterialTexturesPropertyGroup =  mat_data.NUTextures
@@ -73,6 +75,8 @@ def _02_F00A(self, mesh, xfbin_mat, mesh_flags):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
@@ -157,6 +161,8 @@ def _01_F002(self, mesh, xfbin_mat, mesh_flags):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
@@ -204,6 +210,8 @@ def _01_F003(self, mesh, xfbin_mat, mesh_flags):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
@@ -249,6 +257,8 @@ def _03_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F002'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
@@ -321,6 +331,8 @@ def _01_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F008'):
 	material.name = xfbin_mat.name
 
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
@@ -382,6 +394,8 @@ def _03_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F008'):
 
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
@@ -455,6 +469,8 @@ def _05_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '5F002'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
@@ -500,6 +516,8 @@ def _05_F00D(self, mesh, xfbin_mat, mesh_flags):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
@@ -553,6 +571,8 @@ def _07_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F002'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	#check if pointLightPos0 object exists
 	pointLightPos0 = bpy.data.objects.get('pointLightPos0')
@@ -635,6 +655,8 @@ def _19_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '19F002'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
@@ -717,6 +739,8 @@ def _01_F801(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F801'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
@@ -825,6 +849,8 @@ def _01_F130(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F130'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
 	texture: XfbinMaterialTexturesPropertyGroup = mat_data.NUTextures[0]
@@ -877,6 +903,8 @@ def _20_F000(self, mesh, xfbin_mat, mesh_flags, shader_name = '20F000'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
@@ -1366,6 +1394,8 @@ def _03_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F00F'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
@@ -1457,6 +1487,8 @@ def _01_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F00F'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
@@ -1516,6 +1548,8 @@ def E002(self, mesh, xfbin_mat, mesh_flags):
 
 	material = bpy.data.materials.new(f'{xfbin_mat.name}')
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	meshmat = mesh.materials[0]
 	material.use_nodes = True
@@ -2140,6 +2174,8 @@ def _07_F006(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F006'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
@@ -2267,6 +2303,8 @@ def _07_F00B(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F00B'):
 	material.name = xfbin_mat.name
 	
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	
 	mat_data: XfbinMaterialPropertyGroup = material.xfbin_material_data
@@ -2321,6 +2359,8 @@ def default_mat(self, mesh, xfbin_mat, mesh_flags, nodegrp = 'Default'):
 
 	material = bpy.data.materials.new(f'{xfbin_mat.name}')
 	material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
+	if not xfbin_mat.texture_groups:
+		return material
 
 	meshmat = mesh.materials[0]
 	material.use_nodes = True
