@@ -46,6 +46,7 @@ class NudMeshGroup:
         self.name = br_mesh_group.name
         self.bone_flags = br_mesh_group.boneFlags
         self.bounding_sphere = br_mesh_group.boundingSphere
+        self.unk_values = br_mesh_group.unkValues
 
         self.meshes = list()
         for br_mesh in br_mesh_group.meshes:
@@ -208,7 +209,10 @@ class NudMaterial:
 
 class NudMaterialTexture:
     def init_data(self, texture: BrNudMaterialTexture):
-        self.unk0 = texture.unk0
+        self.baseID = texture.baseID
+        self.groupID = texture.groupID
+        self.subGroupID = texture.subGroupID
+        self.textureID = texture.textureID
         self.mapMode = texture.mapMode
 
         self.wrapModeS = texture.wrapModeS
@@ -217,7 +221,7 @@ class NudMaterialTexture:
         self.magFilter = texture.magFilter
         self.mipDetail = texture.mipDetail
         self.unk1 = texture.unk1
-        self.unk2 = texture.unk2
+        self.LOD = texture.LOD
 
 
 class NudMaterialProperty:

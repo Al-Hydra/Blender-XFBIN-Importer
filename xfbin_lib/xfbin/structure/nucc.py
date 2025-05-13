@@ -19,10 +19,12 @@ class NuccChunk:
 
     chunks: List['NuccChunk']
 
-    def __init__(self, file_path, name):
+    def __init__(self, file_path, name, type_str = "NuccChunk"):
         self.extension = ''
         self.filePath = file_path
         self.name = name
+        self.type = type_str
+        self.version = 0x79
 
         self.has_data = False
         self.has_props = False
@@ -35,18 +37,21 @@ class NuccChunk:
         self.chunks = [c for c in chunks if not isinstance(
             c, (NuccChunkPage, NuccChunkIndex))]
 
-    def init_data(self, br_chunk: BrNuccChunk, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference']):
+    def init_data(self, br_chunk: BrNuccChunk, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         """Initializes the data of this `NuccChunk` from a `BrNuccChunk`, using a chunk list and a list of
         local page indices for properly setting references to other `NuccChunk`s
         """
+        self.type = br_chunk.type
+        self.version = br_chunk.version
         self.data = br_chunk.data
         #self.version = br_chunk.version
         self.has_data = True
 
         # Temporary way to store referenced chunks for rebuilding
         # TODO: Maybe replace this with a better solution later
-        self.chunks = [chunk_list[x]
-                       for x in chunk_indices if not isinstance(chunk_list[x], (NuccChunkPage, NuccChunkIndex))]
+        #self.chunks = [chunk_list[x]
+        #               for x in chunk_indices if not isinstance(chunk_list[x], (NuccChunkPage, NuccChunkIndex))]
+        self.chunks = initial_chunks
 
     def get_data(self, file_data_only: bool) -> bytearray:
         """Returns the data of this chunk when it was first read from the XFBIN as a buffer.\n
@@ -89,7 +94,7 @@ class NuccChunk:
 
     @classmethod
     def create_from_nucc_type(cls, type_str, file_path, name) -> 'NuccChunk':
-        return cls.get_nucc_type_from_str(type_str)(file_path, name)
+        return cls.get_nucc_type_from_str(type_str)(file_path, name, type_str)
 
     @classmethod
     def get_all_nucc_types(cls):
@@ -108,33 +113,33 @@ class NuccChunk:
 
 class NuccChunkNull(NuccChunk):
     # Empty
-    def __init__(self, file_path='', name='', version=0x79):
-        super().__init__(file_path, name)
+    def __init__(self, file_path='', name='',type_str= "NuccChunkNull", version=0x79):
+        super().__init__(file_path, name, type_str)
         self.has_props = True
 
 
 class NuccChunkPage(NuccChunk):
     # Should not be used as a NuccChunk, except when writing
-    def __init__(self, file_path='', name='Page0', version=0x79):
-        super().__init__(file_path, name)
+    def __init__(self, file_path='', name='Page0',type_str= "NuccChunkPage", version=0x79):
+        super().__init__(file_path, name, type_str)
         self.has_props = True
 
 
 class NuccChunkIndex(NuccChunk):
     # Does not exist
-    def __init__(self, file_path='', name='index', version=0x79):
-        super().__init__(file_path, name)
+    def __init__(self, file_path='', name='index', type_str= "NuccChunkIndex", version=0x79):
+        super().__init__(file_path, name, type_str)
         self.has_props = True
 
 
 class NuccChunkTexture(NuccChunk):
-    def __init__(self, file_path, name, version=0x79):
-        super().__init__(file_path, name)
+    def __init__(self, file_path, name, type_str= "NuccChunkTexture", version=0x79):
+        super().__init__(file_path, name, type_str)
 
         # Set these to None in case a texture is a reference only and isn't contained in the xfbin
         self.data = self.nut = None
 
-    def init_data(self, br_chunk: BrNuccChunkTexture, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference']):
+    def init_data(self, br_chunk: BrNuccChunkTexture, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.extension = '.nut'
 
         self.data = br_chunk.data
@@ -150,7 +155,7 @@ class NuccChunkTexture(NuccChunk):
 
 
 class NuccChunkDynamics(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkDynamics, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference']):
+    def init_data(self, br_chunk: BrNuccChunkDynamics, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         #self.version = br_chunk.version
         self.has_data = True
@@ -177,6 +182,8 @@ class NuccChunkDynamics(NuccChunk):
 
 
 class Dynamics1:
+    def __init__(self) -> None:
+        self.name = ''
     def init_data(self, sec1: BrDynamics1, sec1_shorts: Iterator):
         self.Bounciness = sec1.Bounciness
         self.Elasticity = sec1.Elasticity
@@ -209,7 +216,7 @@ class Dynamics2:
 
 class NuccChunkClump(NuccChunk):
 
-    def init_data(self, br_chunk: BrNuccChunkClump, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference']):
+    def init_data(self, br_chunk: BrNuccChunkClump, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
 
         self.data = br_chunk.data
         #self.version = br_chunk.version
@@ -222,6 +229,8 @@ class NuccChunkClump(NuccChunk):
 
         self.coord_flag0 = br_chunk.coordFlag0
         self.coord_flag1 = br_chunk.coordFlag1
+
+        self.bounding_box = br_chunk.bounding_box if self.field00 == 2 else [0, 0, 0, 0, 0, 0]
 
         self.model_flag0 = br_chunk.modelFlag0
         self.model_flag1 = br_chunk.modelFlag1
@@ -309,7 +318,7 @@ class ClumpModelGroup:
 
 
 class NuccChunkCoord(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkCoord, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference']):
+    def init_data(self, br_chunk: BrNuccChunkCoord, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         #self.version = br_chunk.version
         self.has_data = True
@@ -335,15 +344,15 @@ class CoordNode:
         self.rotation = (0.0,) * 3
         self.scale = (1.0,) * 3
         self.matrix = None
-        self.unkFloat = 1.0
-        self.unkShort = 0
+        self.opacity = 1.0
+        self.flags = 0
 
     def init_data(self, coord: BrNuccChunkCoord):
         self.position = coord.position
         self.rotation = coord.rotation
         self.scale = coord.scale
-        self.unkFloat = coord.unkFloat
-        self.unkShort = coord.unkShort
+        self.opacity = coord.opacity
+        self.flags = coord.flags
 
     def get_children_recursive(self) -> List['CoordNode']:
         result = list()
@@ -359,12 +368,12 @@ class CoordNode:
         self.position = other.position
         self.rotation = other.rotation
         self.scale = other.scale
-        self.unkFloat = other.unkFloat
-        self.unkShort = other.unkShort
+        self.opacity = other.opacity
+        self.flags = other.flags
 
 
 class NuccChunkModel(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkModel, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference']):
+    def init_data(self, br_chunk: BrNuccChunkModel, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.extension = '.nud'
 
         self.data = br_chunk.data
@@ -437,17 +446,15 @@ class RiggingFlag(IntFlag):
     SKINNED = 0x02  # JoJo eyes
     OUTLINE = 0x04
 
-    TEETH = 0x05  # Storm teeth
-    FULL = 0x06  # Body and tongue
-
     # Storm 4 and JoJo use these two combined for most models (in addition to the previous flags)
     BLUR = 0x10
     SHADOW = 0x20
+    MORPH = 0x100
 
 
 class NuccChunkMaterial(NuccChunk):
-    def __init__(self, file_path, name):
-        super().__init__(file_path, name)
+    def __init__(self, file_path, name, type_str= "NuccChunkMaterial"):
+        super().__init__(file_path, name, type_str)
         self.alpha = 0
         self.glare = 0
         self.flags = 0
@@ -461,7 +468,7 @@ class NuccChunkMaterial(NuccChunk):
         self.Misc1 = 0
         
         self.texture_groups: List[MaterialTextureGroup] = list()
-    def init_data(self, br_chunk: BrNuccChunkMaterial, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference']):
+    def init_data(self, br_chunk: BrNuccChunkMaterial, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         #self.version = br_chunk.version
         self.has_data = True
@@ -514,29 +521,8 @@ class MaterialTextureGroup:
         return iter(self.texture_chunks)
 
 
-class NuccChunkAnmStrm(BrNuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkAnmStrm, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference']):
-        
-        self.data = br_chunk.data
-        #self.version = br_chunk.version
-        self.has_data = True
-        self.has_props = False
-
-        self.anm_length = br_chunk.AnmLength
-        self.frame_size = br_chunk.FrameSize
-        self.loop_anm = br_chunk.isLooped
-        self.clump_count = br_chunk.ClumpCount
-        self.other_entry_count = br_chunk.OtherEntryCount
-        self.coord_count = br_chunk.CoordCount
-
-        self.clumps: List[AnmClump] = list()
-        self.other_entry_indices = br_chunk.OtherEntryIndices
-        self.coord_parents = br_chunk.CoordParents
-        self.frames = []
-
-
 class NuccChunkModelHit(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkModelHit, chunk_list: List['NuccChunk'], chunk_indices: List[int], reference_indices: List[int]):
+    def init_data(self, br_chunk: BrNuccChunkModelHit, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         #self.version = br_chunk.version
         self.has_data = True
@@ -563,13 +549,13 @@ class ModelHit:
 
 
 class NuccChunkBillboard(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkBillboard, chunk_list: List['NuccChunk'], chunk_indices: List[int], reference_indices: List[int]):
+    def init_data(self, br_chunk: BrNuccChunkBillboard, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         #self.version = br_chunk.version
 
 
 class NuccChunkModelPrimitiveBatch(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkModelPrimitiveBatch, chunk_list: List['NuccChunk'], chunk_indices: List[int], reference_indices: List[int]):
+    def init_data(self, br_chunk: BrNuccChunkModelPrimitiveBatch, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         #self.version = br_chunk.version
         self.has_data = True
@@ -591,7 +577,7 @@ class PrimitiveBatchMesh:
 
 
 class NuccChunkPrimitiveVertex(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkPrimitiveVertex, chunk_list: List['NuccChunk'], chunk_indices: List[int], reference_indices: List[int]):
+    def init_data(self, br_chunk: BrNuccChunkPrimitiveVertex, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         #self.version = br_chunk.version
         self.has_data = True
@@ -612,7 +598,7 @@ class PrimitiveVertex:
 
 
 class NuccChunkAnm(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkAnm, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference']):
+    def init_data(self, br_chunk: BrNuccChunkAnm, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List['ChunkReference'], initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         self.has_data = True
         self.has_props = False
@@ -625,13 +611,11 @@ class NuccChunkAnm(NuccChunk):
         self.clumps: List[AnmClump] = list()
         for br_anm_clump in br_chunk.clumps:
             anm_clump = AnmClump()
-            anm_clump.init_data(br_anm_clump, chunk_refs)
+            anm_clump.init_data(br_anm_clump, br_chunk.version, chunk_refs, initial_chunks)
             self.clumps.append(anm_clump)
 
-
-        self.coord_parents: List[BrAnmCoordParent] = br_chunk.coord_parents
         # Set up the child-parent relations in AnmBones
-        for p in self.coord_parents:
+        for p in br_chunk.coord_parents:
             if -1 in [p.parent_clump_index, p.parent_coord_index, p.child_clump_index, p.child_coord_index]:
                 continue
             
@@ -653,10 +637,41 @@ class NuccChunkAnm(NuccChunk):
         self.other_entries = [e for e in self.entries if e.clump is None]
 
 class NuccChunkCamera(NuccChunk):
-    def init_data(self, br_chunk: BrNuccChunkCamera, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List):
+    def init_data(self, br_chunk: BrNuccChunkCamera, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List, initial_chunks: List['NuccChunk']):
         self.data = br_chunk.data
         self.has_data = True
         self.has_props = False
         self.extension = '.camera'
 
         self.fov = br_chunk.fov
+
+
+class NuccChunkLightDirc(NuccChunk):
+    def init_data(self, br_chunk: BrNuccChunkLightDirc, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List, initial_chunks: List['NuccChunk']):
+        self.data = br_chunk.data
+        self.has_data = True
+        self.has_props = False
+        self.extension = '.lightdirc'
+
+        self.data = br_chunk.data
+
+
+class NuccChunkLightPoint(NuccChunk):
+    def init_data(self, br_chunk: BrNuccChunkLightPoint, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List, initial_chunks: List['NuccChunk']):
+        self.data = br_chunk.data
+        self.has_data = True
+        self.has_props = False
+        self.extension = '.lightpoint'
+
+        self.data = br_chunk.data
+
+
+class NuccChunkAmbient(NuccChunk):
+    def init_data(self, br_chunk: BrNuccChunkAmbient, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List, initial_chunks: List['NuccChunk']  ):
+        self.data = br_chunk.data
+        self.has_data = True
+        self.has_props = False
+        self.extension = '.ambient'
+
+        self.color = br_chunk.color
+        self.strength = br_chunk.strength

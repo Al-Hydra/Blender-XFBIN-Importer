@@ -1,5 +1,6 @@
 from enum import IntFlag
 from typing import List, Tuple
+import time
 
 from ...util import *
 
@@ -120,7 +121,8 @@ class BrNudMeshGroup(BrStruct):
     meshes: List['BrNudMesh']
 
     def __br_read__(self, br: BinaryReader, nud: BrNud) -> None:
-        self.boundingSphere = br.read_float(8)
+        self.boundingSphere = br.read_float(4)
+        self.unkValues = br.read_float(4)
         self.nameStart = br.read_uint32()
 
         with br.seek_to(self.nameStart + nud.nameStart):
@@ -139,6 +141,9 @@ class BrNudMeshGroup(BrStruct):
     def __br_write__(self, br: 'BinaryReader', mesh_group: 'NudMeshGroup', buffers: NudBuffers, mesh_groups_count, mesh_count):
         # Bounding sphere
         br.write_float(mesh_group.bounding_sphere)
+
+        # Unknown values
+        br.write_float(mesh_group.unk_values)
 
         # Name start in names buffer
         br.write_uint32(buffers.names.size())
@@ -186,6 +191,7 @@ class BrNudMesh(BrStruct):
         # UV + Vertices
         with br.seek_to(self.vertClumpStart):
             boneType = self.vertexSize & 0xF0
+
             vertexType = self.vertexSize & 0x0F
 
             colors = list()
@@ -202,6 +208,7 @@ class BrNudMesh(BrStruct):
                     elif uvType == NudUvType.HalfFloat:
                         colors.append(
                             list(map(lambda x: int(x * 255), br.read_half_float(4))))
+                        
 
                     uvs.append(list())
                     for _ in range(uvCount):
@@ -287,6 +294,8 @@ class BrNudMesh(BrStruct):
 
                 for uv in vertex.uv:
                     buffers.vertClump.write_half_float(uv)
+
+
 
         for vertex in mesh.vertices:
             vertex_br.write_struct(BrNudVertex(), vertex,
@@ -376,6 +385,7 @@ class BrNudVertex(BrStruct):
             self.boneIds = br.read_uint8(4)
             self.boneWeights = list(
                 map(lambda x: float(x) / 255, br.read_uint8(4)))
+            
         else:
             raise Exception(f'Unsupported bone type: {boneType}')
 
@@ -405,10 +415,10 @@ class BrNudVertex(BrStruct):
             br.write_float(0)
         elif vertexType == NudVertexType.NormalsHalfFloat:
             br.write_half_float(vertex.normal)
-            br.write_half_float(1.0)
+            br.write_half_float(0)
         elif vertexType == NudVertexType.NormalsTanBiTanHalfFloat:
             br.write_half_float(vertex.normal)
-            br.write_half_float(1.0)
+            br.write_half_float(0)
             br.write_half_float(vertex.bitangent[:3])
             br.write_half_float(0)
             br.write_half_float(vertex.tangent[:3])
@@ -503,10 +513,13 @@ class BrNudMaterialTexture(BrStruct):
     def __br_read__(self, br: BinaryReader) -> None:
         # This is not the hash, because that does not exist in CC2 NUDs.
         # Apparently, 0 makes it completely ignore the NUT texture, while -1 makes it use it
-        self.unk0 = br.read_int32()
-        br.read_uint32()
+        self.baseID = br.read_uint8()
+        self.groupID = br.read_uint8()
+        self.subGroupID = br.read_uint8()
+        self.textureID = br.read_uint8()
+        unk0 = br.read_uint32()
 
-        br.read_uint16()
+        unk1 = br.read_uint16()
         self.mapMode = br.read_uint16()
 
         self.wrapModeS = br.read_uint8()
@@ -516,11 +529,14 @@ class BrNudMaterialTexture(BrStruct):
         self.mipDetail = br.read_uint8()
         self.unk1 = br.read_uint8()
 
-        br.read_uint32()
-        self.unk2 = br.read_uint16()
+        unk2 = br.read_uint32()
+        self.LOD = br.read_uint16()
 
     def __br_write__(self, br: 'BinaryReader', texture: 'NudMaterialTexture') -> None:
-        br.write_int32(texture.unk0)
+        br.write_uint8(texture.baseID)
+        br.write_uint8(texture.groupID)
+        br.write_uint8(texture.subGroupID)
+        br.write_uint8(texture.textureID)
         br.write_uint32(0)
 
         br.write_uint16(0)
@@ -534,7 +550,7 @@ class BrNudMaterialTexture(BrStruct):
         br.write_uint8(texture.unk1)
 
         br.write_uint32(0)
-        br.write_uint16(texture.unk2)
+        br.write_uint16(texture.LOD)
 
 
 class BrNudMaterialProperty(BrStruct):

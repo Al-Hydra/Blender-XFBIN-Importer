@@ -1,4 +1,4 @@
-import bpy
+import bpy, mathutils
 from bpy.props import (EnumProperty, FloatVectorProperty, IntProperty,
                        IntVectorProperty, StringProperty)
 from bpy.types import Panel, PropertyGroup
@@ -6,6 +6,8 @@ from bpy.types import Panel, PropertyGroup
 from ...xfbin_lib.xfbin.structure.nucc import NuccChunkModel, RiggingFlag
 from ..common.coordinate_converter import pos_cm_to_m_tuple
 from .common import draw_copy_paste_ops, matrix_prop
+from .materials_panel import NUD_ShaderPropertyGroup
+
 
 
 class NudPropertyGroup(PropertyGroup):
@@ -38,7 +40,8 @@ class NudPropertyGroup(PropertyGroup):
     rigging_flag_extra: EnumProperty(
         name='Rigging Flag (Extra)',
         items=[('16', 'Blur (0x10)', ''),
-               ('32', 'Shadow (0x20)', ''), ],
+               ('32', 'Shadow (0x20)', ''),
+                ('256', 'Morph (0x100)', ''), ],
         description='Both are usually always on',
         options={'ENUM_FLAG'},
         default={'16', '32'},
@@ -90,7 +93,14 @@ class NudPropertyGroup(PropertyGroup):
 
     bounding_sphere_group: FloatVectorProperty(
         name='Bounding Sphere (Group)',
-        size=8,
+        size=4,
+    )
+
+    shader_settings: bpy.props.PointerProperty(type=NUD_ShaderPropertyGroup)
+
+    unk_values: FloatVectorProperty(
+        name='Unknown Values',
+        size=4,
     )
 
     def init_data(self, model: NuccChunkModel, mesh_bone: str):
@@ -119,6 +129,9 @@ class NudPropertyGroup(PropertyGroup):
             rigging_flag_extra.add('16')
         if model.rigging_flag & RiggingFlag.SHADOW:
             rigging_flag_extra.add('32')
+        if model.rigging_flag & RiggingFlag.MORPH:
+            rigging_flag_extra.add('256')
+        
 
         self.rigging_flag_extra = rigging_flag_extra
 
@@ -141,6 +154,12 @@ class NudPropertyGroup(PropertyGroup):
         # Set the NUD's bounding sphere
         self.bounding_sphere_nud = pos_cm_to_m_tuple(tuple(model.nud.bounding_sphere))
 
+        # Set the shader settings
+        self.shader_settings.init_data(model.nud.mesh_groups[0].meshes[0].materials[0])
+
+        # Set the vertex format
+        self.unk_values = model.nud.mesh_groups[0].unk_values
+
 
 class NudPropertyPanel(Panel):
     """Panel that displays the NudPropertyGroup attached to the selected empty object."""
@@ -155,7 +174,7 @@ class NudPropertyPanel(Panel):
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return obj and obj.type == 'EMPTY' and obj.parent and obj.parent.type == 'ARMATURE'
+        return obj and obj.parent and obj.parent.type == 'ARMATURE'
 
     def draw(self, context):
         layout = self.layout
@@ -164,14 +183,22 @@ class NudPropertyPanel(Panel):
 
         draw_copy_paste_ops(layout, 'xfbin_nud_data', 'NUD Properties')
 
-        layout.prop_search(data, 'mesh_bone', obj.parent.data, 'bones')
+        collection = obj.users_collection[0]
+        row = layout.row()
 
-        layout.label(text='Rigging Flags')
+        row.prop_search(data, 'mesh_bone', obj.parent.data, 'bones')
+        row.prop_search(data, 'hit_chunk_name', collection, 'objects')
+
+        layout.label(text='Mesh Flags')
         box = layout.box()
         box.prop(data, 'rigging_flag')
         box.prop(data, 'rigging_flag_extra')
 
-        layout.prop(data, 'bone_flag')
+        row = layout.row()
+        row.prop(data, 'bone_flag')
+
+        row = layout.row()
+        row.prop(data, 'unk_values')
 
         box = layout.box()
         row = box.row()
@@ -180,83 +207,25 @@ class NudPropertyPanel(Panel):
         row.prop(data, 'light_mode')
         row.prop(data, 'light_category')
 
-        if data.model_attributes & 0x04:
-            layout.prop(data, 'bounding_box')
+        shader = data.shader_settings
 
-        matrix_prop(layout, data, 'bounding_sphere_nud', 4, 'Bounding Sphere (NUD)')
+        box = layout.box()
+        row = box.row()
+        row.label(text='Default Shader Settings')
+        row = box.row()
+        row.prop(shader, 'source_factor')
+        row.prop(shader, 'destination_factor')
+        row = box.row()
+        row.prop(shader, 'alpha_test')
+        row.prop(shader, 'alpha_function')
+        row.prop(shader, 'alpha_reference')
+        row = box.row()
+        row.prop(shader, 'cull_mode')
+        row.prop(shader, 'zbuffer_offset')
+        row = box.row()
+        row.prop(shader, 'unk1')
+        row.prop(shader, 'unk2')
 
-        row = layout.row()
-        row.operator(create_bounding_sphere.bl_idname)
-        row.operator(update_bounding_sphere.bl_idname)
-        matrix_prop(layout, data, 'bounding_sphere_group', 8, 'Bounding Sphere (Group)')
-
-        collection = bpy.data.collections[obj.users_collection[0].name]
-        layout.prop_search(data, 'hit_chunk_name', collection, 'objects')
-
-class create_bounding_sphere(bpy.types.Operator):
-    bl_idname = "object.create_bounding_sphere"
-    bl_label = "Create Bounding Sphere Object"
-    bl_description = 'Creates an empty object using bounding sphere location and scale values'
-    @classmethod
-    def poll(cls, context):
-        obj = context.object
-        return obj and obj.type == 'EMPTY' and obj.parent is not None
-    def execute(self, context):
-        obj = context.object
-        data: NudPropertyGroup = obj.xfbin_nud_data
-        
-        #Create a new collection for bounding spheres
-        if not bpy.data.collections.get(f'{obj.users_collection[0].name} [BOUNDING SPHERES]'):
-            collection = bpy.data.collections.new(f'{obj.users_collection[0].name} [BOUNDING SPHERES]')
-            bpy.context.scene.collection.children.link(collection)
-
-        else:
-            collection = bpy.data.collections[f'{obj.users_collection[0].name} [BOUNDING SPHERES]']
-        
-        
-        #remove existing bounding sphere
-        if bpy.data.objects.get(f'{obj.name} Bounding Sphere'):
-            bpy.data.objects.remove(bpy.data.objects[f'{obj.name} Bounding Sphere'])
-        
-        #create new bounding sphere
-        empty = bpy.data.objects.new(f'{obj.name} Bounding Sphere', None)
-        empty.empty_display_type = 'SPHERE'
-        empty.empty_display_size = data.bounding_sphere_nud[3]
-        empty.location = data.bounding_sphere_nud[0:3]
-        
-        #link the object to the collection we created
-        collection.objects.link(empty)
-
-        return {'FINISHED'}
-
-class update_bounding_sphere(bpy.types.Operator):
-    bl_idname = "object.update_bounding_sphere"
-    bl_label = "Update bounding sphere values"
-    bl_description = 'Updates the bounding sphere values if an object exists'
-    @classmethod
-    def poll(cls, context):
-        obj = context.object
-        return obj and obj.type == 'EMPTY' and obj.parent is not None
-    def execute(self, context):
-        obj = context.object
-        data: NudPropertyGroup = obj.xfbin_nud_data
-        
-        collection = bpy.data.collections.get(f'{obj.users_collection[0].name} [BOUNDING SPHERES]')
-        
-        if not collection:
-            self.report({'ERROR'}, 'No bounding sphere collection found')
-            return {'CANCELLED'}
-        
-        bsphere = collection.objects.get(f'{obj.name} Bounding Sphere')
-
-        if not bsphere:
-            self.report({'ERROR'}, f'Bounding sphere object ({obj.name} Bounding Sphere) not found')
-            return {'CANCELLED'}
-        
-        #update the bounding sphere values
-        data.bounding_sphere_nud[0:3] = bsphere.location
-        data.bounding_sphere_nud[3] = (bsphere.scale[0] + bsphere.scale[1] + bsphere.scale[2]) / 3
-        return {'FINISHED'}
 
 nud_property_groups = (
     NudPropertyGroup,
@@ -265,6 +234,5 @@ nud_property_groups = (
 nud_classes = (
     *nud_property_groups,
     NudPropertyPanel,
-    create_bounding_sphere,
-    update_bounding_sphere
+
 )

@@ -1,5 +1,5 @@
 # Blender-XFBIN-Importer
- Blender import/export script for CyberConnect2 games XFBIN files. Supports Blender versions 4.0 and above.
+ Blender import/export script for CyberConnect2 games XFBIN files. Supports Blender versions 4.2 and above.
  
  Uses [xfbin_lib](https://github.com/SutandoTsukai181/xfbin_lib) for reading/writing XFBIN files.
 

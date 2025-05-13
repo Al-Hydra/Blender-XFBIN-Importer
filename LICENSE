@@ -1,24 +1,26 @@
 # Blender-XFBIN-Importer License
 
-# 1. License Grant
+**Version 1.1**
+
+## 1. License Grant
 
 The Blender-XFBIN-Importer (hereinafter referred to as "the Software") is provided to you under the terms of this License. By using the Software, you agree to be bound by the terms of this License. If you do not agree to the terms of this License, do not use the Software.
 
-# 2. Permitted Use
+## 2. Permitted Use
 
-The Software is licensed for use only by members of the Naruto Storm Modding Server Discord server (https://discord.gg/naruto-storm-modding-server-841394026599022682) and the JoJo's Bizarre Modding Community (hereinafter referred to collectively as "the Discord Servers"). Use of the Software is strictly limited to those who are in compliance with the rules of the Discord Servers.
+The Software is licensed for use only by members of the Naruto Storm Modding Server Discord server (https://discord.com/channels/841394026599022682/1186437038883471381) and the JoJo's Bizarre Modding Community (hereinafter referred to collectively as "the Discord Servers"). Use of the Software is strictly limited to those who are in compliance with the rules of the Discord Servers.
 
-# 3. Purpose
+## 3. Purpose
 
 The Software is created for the sole purpose of modding the Ultimate Ninja (UN) titles, including Ultimate Ninja Storm and .hack games, as well as JoJo's Bizarre Adventure games such as Eyes of Heaven and All Star Battle R, all of which are CyberConnect2 (CC2) and Bandai Namco commercially published games. The Software is intended for educational and research purposes only.
 
-# 4. Restrictions
+## 4. Restrictions
 
 1. The Software is only permitted to be used for modifying CyberConnect2 (CC2) published game titles. Any use of the Software for projects outside of CC2 titles is strictly prohibited unless explicit permission is granted by the creator of the Software.
 
 2. Any violation of the rules of the Discord Servers or the terms of this License will result in the immediate revocation of your right to use the Software. Upon such revocation, you must cease all use of the Software and delete all copies in your possession.
 
-# 5. Code Usage and Distribution
+## 5. Code Usage and Distribution
 
 1. **Source Code Access**: The source code of the Software is provided for educational and research purposes. You are permitted to view, study, and modify the source code for these purposes only.
 
@@ -26,38 +28,6 @@ The Software is created for the sole purpose of modding the Ultimate Ninja (UN) 
 
 3. **Derivative Works**: Any derivative works based on the Software must remain within the scope of educational and research purposes and comply with the terms of this License. Derivative works cannot be used for commercial purposes.
 
-# 6. Disclaimer of Warranty
+## 6. Disclaimer of Warranty
 
 The Software is provided "as is," without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and noninfringement. The creator of the Software is not responsible for any issues arising from the use of the Software.
-
-# 7. Limitation of Liability
-
-In no event will the creator of the Software be liable for any damages, including without limitation any direct, indirect, incidental, consequential, special, exemplary, or punitive damages arising out of, relating to, or in connection with your use of the Software, even if advised of the possibility of such damages. The creator is not responsible for any copyright issues or damages that may arise from the use of the Software. Users are solely responsible for ensuring their use complies with applicable laws and regulations.
-
-# 8. Rights to Original Works
-
-Bandai Namco and CyberConnect2 (CC2) maintain all rights to their original works. This License does not grant you any rights to the original works of Bandai Namco or CC2.
-
-# 9. Governing Law
-
-This License shall be governed by and construed in accordance with the laws of the jurisdiction in which the creator of the Software resides, without regard to its conflict of law principles.
-
-# 10. Termination
-
-This License is effective until terminated. Your rights under this License will terminate automatically without notice from the creator if you fail to comply with any term(s) of this License. Upon termination, you must cease all use of the Software and destroy all copies of the Software.
-
-# 11. Amendments
-
-The creator of the Software reserves the right to modify this License at any time. Any modifications will be posted on the Discord Servers, and your continued use of the Software will constitute your acceptance of the modified terms.
-
-# 12. Contact Information
-
-For inquiries or permissions, please contact the creator of the Software through the Naruto Storm Modding Server Discord server or the JoJo's Bizarre Modding Community.
-
-# 13. Acknowledgements
-
-Big thanks to SutandoTsukai181, the original owner.
-
----
-
-By using the Blender-XFBIN-Importer, you acknowledge that you have read this License, understand it, and agree to be bound by its terms and conditions.
