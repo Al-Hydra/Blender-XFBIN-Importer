@@ -555,8 +555,8 @@ class XfbinImporter:
                         vert = bm.verts.new(pos_scaled_to_blender(vtx.position))
 
                         # Tangents cannot be applied
-                        normal = pos_to_blender(vtx.normal)
-                        custom_normals.append(pos_to_blender(vtx.normal))
+                        normal = Vector(vtx.normal).normalized()
+                        custom_normals.append(normal)
                         vert.normal = normal
 
                         if vtx.bone_weights:

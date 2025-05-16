@@ -849,8 +849,9 @@ class XfbinMaterialPropertyGroup(PropertyGroup):
                 
                 #get the texture props from the first nud shader
                 nud_shader = self.NUD_Shaders[0]
-                props = nud_shader.shader_tex_props[tex_index]
-                nut.init_tex_props(props)      
+                if len(nud_shader.shader_tex_props) > tex_index:
+                    props = nud_shader.shader_tex_props[tex_index]
+                    nut.init_tex_props(props)      
     
 
     def init_copy(self, matprop):
