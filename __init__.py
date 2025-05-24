@@ -5,7 +5,7 @@ blender_loader = importlib.util.find_spec('bpy')
 bl_info = {
     "name": "XFBIN File Importer/Exporter",
     "author": "SutandoTsukai181, HydraBladeZ, Dei, TheLeonX",
-    "version": (1, 6, 6),
+    "version": (2, 0, 2),
     "blender": (4, 2, 0),
     "location": "File > Import-Export",
     "description": "Import/Export XFBIN files found in CC2's Storm Engine games.",
