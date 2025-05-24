@@ -538,8 +538,11 @@ class XfbinImporter:
                     mat_chunk = nucc_model.material_chunks[mat_index]
 
                     #add the material to the mesh
-                    blender_mesh.materials.append(self.make_material(mat_chunk, mesh, [nucc_model.rigging_flag, group.bone_flags]))
-
+                    try:
+                        blender_mesh.materials.append(self.make_material(mat_chunk, mesh, [nucc_model.rigging_flag, group.bone_flags]))
+                    except:
+                        print(f"Error adding material {mat_chunk.name} to mesh {mesh.name}")
+                        pass
                     uv_count = len(mesh.vertices[0].uv)
 
                     #check if the uv layers already exist
@@ -828,7 +831,12 @@ class XfbinImporter:
             
 
             if shader in shaders_dict:
-                material = shaders_dict.get(shader)(self, mesh, xfbin_mat, mesh_flags)
+                try:
+                    material = shaders_dict.get(shader)(self, mesh, xfbin_mat, mesh_flags)
+                except Exception as e:
+                    self.operator.report(
+                        {'WARNING'}, f"There was an error creating the material {material_name} using shader {shader} \n{e}")
+                    material = shaders_dict.get("default")(self, mesh, xfbin_mat, mesh_flags)
             else:
                 material = shaders_dict.get("default")( self, mesh, xfbin_mat, mesh_flags)
 

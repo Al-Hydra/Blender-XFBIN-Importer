@@ -7,12 +7,20 @@ from .br.br_dds import BrDDS, BrDDS_Header, BrDDS_PixelFormat, BrDDS_DX10_Header
 from ..util.binary_reader.binary_reader import BinaryReader, Endian
 
 class DDS:
+    def __init__(self):
+        self.magic = 'DDS '
+        self.header = DDS_Header()
+        self.mipmaps = []
+        self.texture_data = b''
+        
+        
     def init_data(self, dds: BrDDS):
         self.magic = 'DDS '
         self.header = BrDDS_Header()
         self.header.init_data(dds.header)
         self.mipmaps = dds.mipmaps
         self.texture_data = dds.texture_data
+
 
 
 class DDS_Header:

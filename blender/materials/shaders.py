@@ -544,12 +544,6 @@ def _05_F00D(self, mesh, xfbin_mat, mesh_flags):
 	#find the shader node
 	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
 
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
-
 	#set shadows culling
 	material.use_backface_culling_shadow = True
 	
@@ -769,7 +763,10 @@ def _01_F801(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F801'):
 	#set texture wrap mode
 	if texture2.wrapModeS == '3':
 		tex2_node.extension = 'EXTEND'
-	tex2_node.image.colorspace_settings.name = 'Non-Color'
+	try:
+		tex2_node.image.colorspace_settings.name = 'Non-Color'
+	except:
+		pass
 	
 	if not tex2_node.image:
 		tex2_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
@@ -780,8 +777,10 @@ def _01_F801(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F801'):
 	#set texture wrap mode
 	if texture3.wrapModeS == '3':
 		tex3_node.extension = 'EXTEND'
-	tex3_node.image.colorspace_settings.name = 'Non-Color'
-
+	try:
+		tex3_node.image.colorspace_settings.name = 'Non-Color'
+	except:
+		pass
 	if not tex3_node.image:
 		tex3_node.image = bpy.data.images.load(f"{path}/error64x64.dds")
   
@@ -791,8 +790,11 @@ def _01_F801(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F801'):
 	#set texture wrap mode
 	if texture4.wrapModeS == '3':
 		tex4_node.extension = 'EXTEND'
-	tex4_node.image.colorspace_settings.name = 'Non-Color'
 	
+	try:
+		tex4_node.image.colorspace_settings.name = 'Non-Color'
+	except:
+		pass
 	
 	
 	#find the shader node
@@ -1440,21 +1442,7 @@ def _03_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F00F'):
 	#find the shader node
 	shader_node = material.node_tree.nodes.get(f'{shader_name}')
 
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
 
-	shader_node.inputs['uvOffset1 Offset X'].default_value = mat_data.uvOffset1[0]
-	shader_node.inputs['uvOffset1 Offset Y'].default_value = mat_data.uvOffset1[1]
-	shader_node.inputs['uvOffset1 Scale X'].default_value = mat_data.uvOffset1[2]
-	shader_node.inputs['uvOffset1 Scale Y'].default_value = mat_data.uvOffset1[3]
-
-	shader_node.inputs['blendRate Tex 1'].default_value = mat_data.blendRate[0]
-	shader_node.inputs['blendRate Tex 2'].default_value = mat_data.blendRate[1]
-
-	shader_node.inputs['falloff'].default_value = mat_data.fallOff
 	#set shader params
 	for prop in mesh.materials[0].properties:
 		if prop.name == "NU_blendType":
@@ -1521,13 +1509,6 @@ def _01_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F00F'):
 	#find the shader node
 	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
 
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
-
-	shader_node.inputs['falloff'].default_value = mat_data.fallOff
 
 	#set shadows culling
 	material.use_backface_culling_shadow = True

@@ -74,7 +74,7 @@ class BrDDS(BrStruct):
             self.texture_data = bytes(self.texture_data)
 
     def __br_write__(self, br: 'BinaryReader', dds: 'DDS'):
-        br.write_str(dds.magic)
+        br.write_str_fixed(dds.magic, 4)
         br.write_struct(BrDDS_Header(), dds.header)
         if PixelFormat_Flags.values(dds.header.pixel_format.flags) == 'DDPF_FOURCC':
             if dds.header.pixel_format.fourCC == 'DX10':
@@ -82,13 +82,21 @@ class BrDDS(BrStruct):
                                 dds.header.pixel_format.dx10_header)
 
             if dds.header.pixel_format.fourCC in ('DXT1', 'DXT3', 'DXT5'):
-                br.write_bytes(dds.texture_data)
+                if dds.header.mipMapCount == 0:
+                    br.write_bytes(dds.texture_data)
+                else:
+                    for i in range(dds.header.mipMapCount):
+                        br.write_bytes(dds.mipmaps[i])
 
         elif 'DDPF_RGB' in PixelFormat_Flags.values(dds.header.pixel_format.flags):
             bitcount = dds.header.pixel_format.rgbBitCount
             bitmasks = dds.header.pixel_format.bitmasks
             #if bitmasks in ((0xf800, 0x7e0, 0x1f, 0), (0x7c00, 0x3e0, 0x1f, 0x8000), (0x0f00, 0x00f0, 0x000f, 0xf000), (0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000),(0x00ff0000, 0x0000ff00, 0x000000ff, 0x0) ):
-            br.write_bytes(dds.texture_data)
+            if dds.header.mipMapCount == 0:
+                br.write_bytes(dds.texture_data)
+            else:
+                for i in range(dds.header.mipMapCount):
+                    br.write_bytes(dds.mipmaps[i])
 
 
 class BrDDS_Header(BrStruct):
@@ -103,6 +111,7 @@ class BrDDS_Header(BrStruct):
         self.width = br.read_uint32()
         #print(f'Width = {self.width}')
         self.pitchOrLinearSize = br.read_uint32()
+        #print(f'PitchOrLinearSize = {self.pitchOrLinearSize}')
         self.depth = br.read_uint32()
         #print(f'Depth = {self.depth}')
         self.mipMapCount = br.read_uint32()
@@ -153,7 +162,7 @@ class BrDDS_PixelFormat(BrStruct):
         br.write_uint32(dds2.size)
         br.write_uint32(dds2.flags)
         if dds2.fourCC is not None:
-            br.write_str(dds2.fourCC)
+            br.write_str_fixed(dds2.fourCC, 4)
         else:
             br.write_uint32(0)
         br.write_uint32(dds2.rgbBitCount)
