@@ -822,11 +822,6 @@ class XfbinImporter:
         material_name = xfbin_mat.name
         if not bpy.data.materials.get(material_name):
             
-            #material = bpy.data.materials.new(material_name)
-            #material.xfbin_material_data.init_data(xfbin_mat, mesh, mesh_flags)
-
-            #meshmat = mesh.materials[0]
-            
             shader = int_to_hex_str(mesh.materials[0].flags, 4)
             
 
