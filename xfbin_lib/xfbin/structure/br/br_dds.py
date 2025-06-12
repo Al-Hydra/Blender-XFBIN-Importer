@@ -98,7 +98,6 @@ class BrDDS(BrStruct):
                 for i in range(dds.header.mipMapCount):
                     br.write_bytes(dds.mipmaps[i])
 
-
 class BrDDS_Header(BrStruct):
     def __br_read__(self, br: BinaryReader):
         self.size = br.read_uint32()

@@ -195,15 +195,20 @@ def NutTexture_to_DDS(nuttex: NutTexture):
             header.pixel_format.flags = 0x40  # DDPF_RGB
 
         if nuttex.pixel_format in (6, 7, 8):
-            dds.mipmaps = nuttex.mipmaps
-            texture_data = array('u', nuttex.texture_data)
-            texture_data.byteswap()
-            dds.texture_data = texture_data.tobytes()
+            for mip in nuttex.mipmaps:
+                mip = array('h', mip)
+                mip.byteswap()
+                dds.mipmaps.append(mip.tobytes())
+            
+            dds.texture_data = dds.mipmaps[0] 
+            
         elif nuttex.pixel_format in (14, 17):
-            dds.mipmaps = nuttex.mipmaps
-            texture_data = array('l', nuttex.texture_data)
-            texture_data.byteswap()
-            dds.texture_data = texture_data.tobytes()
+            for mip in nuttex.mipmaps:
+                mip = array('l', mip)
+                mip.byteswap()
+                dds.mipmaps.append(mip.tobytes())
+            
+            dds.texture_data = dds.mipmaps[0]
 
     header.pixel_format.size = 32
     if header.mipMapCount > 1:
