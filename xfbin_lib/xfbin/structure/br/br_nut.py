@@ -27,6 +27,8 @@ class BrNut(BrStruct):
 
 
 class BrNutTexture(BrStruct):
+    def __init__(self):
+        self.mipmaps = []
     def __br_read__(self, br: BinaryReader, nut: BrNut):
         pos = br.pos()
         self.total_size = br.read_uint32()
@@ -72,10 +74,9 @@ class BrNutTexture(BrStruct):
         br.read_uint32()
 
         if self.is_cube_map:
-            self.cubemap_faces = [br.read_bytes(
-                self.cubemap_size1) for i in range(6)]
-            self.texture_data = self.mipmaps = b''.join(self.cubemap_faces)
-
+            self.cubemap_faces = [br.read_bytes(self.cubemap_size1) for i in range(6)]
+            self.mipmaps = [b''.join(self.cubemap_faces)]
+            self.texture_data = self.mipmaps[0]
         elif self.mipmap_count > 1:
             if sum(self.mipmap_sizes) != self.data_size:
 
@@ -87,12 +88,11 @@ class BrNutTexture(BrStruct):
                 self.total_size = self.header_size + self.data_size
 
             else:
-                self.mipmaps = [br.read_bytes(
-                    self.mipmap_sizes[i]) for i in range(self.mipmap_count)]
+                self.mipmaps = [br.read_bytes(self.mipmap_sizes[i]) for i in range(self.mipmap_count)]
                 self.texture_data = b''.join(self.mipmaps)
 
         else:
-            self.mipmaps = [br.read_bytes(self.data_size)]
+            self.mipmaps.append(bytes(br.read_bytes(self.data_size)))
             self.texture_data = self.mipmaps[0]
 
     def __br_write__(self, br: 'BinaryReader', nutTex: 'NutTexture'):

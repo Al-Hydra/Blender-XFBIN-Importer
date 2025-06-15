@@ -179,7 +179,8 @@ def NutTexture_to_DDS(nuttex: NutTexture):
         header.pixel_format.rgbBitCount = 0
         header.pixel_format.bitmasks = (0, 0, 0, 0)
 
-        dds.mipmaps = nuttex.mipmaps
+        for mip in nuttex.mipmaps:
+            dds.mipmaps.append(mip)
         dds.texture_data = nuttex.texture_data
 
     elif nuttex.pixel_format in nut_pf_bitmasks.values():
