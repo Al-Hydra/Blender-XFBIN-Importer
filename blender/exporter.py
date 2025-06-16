@@ -56,7 +56,7 @@ from .panels.texture_chunks_panel import (NutTexturePropertyGroup,
                                           TextureChunksListPropertyGroup,
                                           XfbinTextureChunkPropertyGroup)
 from .panels.materials_panel import (NUD_ShaderPropertyGroup, NUD_ShaderParamPropertyGroup, NUD_ShaderTexPropertyGroup)
-
+from .tristrip import tristrip
 
 
 class ExportXfbin(Operator, ExportHelper):
@@ -164,6 +164,13 @@ class ExportXfbin(Operator, ExportHelper):
         default=True,
     )
     
+    optimize_meshes: BoolProperty(
+        name='Optimize meshes',
+        description='If True, will convert triangles to triangle strips\n'
+        'If False, will export the triangles as they are.',
+        default=True,
+    )
+    
     def draw(self, context):
         layout = self.layout
 
@@ -173,7 +180,8 @@ class ExportXfbin(Operator, ExportHelper):
         if self.collection:
             inject_row = layout.row()
             inject_row.prop(self, 'inject_to_xfbin')
-
+            
+            layout.prop(self, "optimize_meshes")
             layout.prop(self, 'export_textures')
             layout.prop(self, 'export_clumps')
 
@@ -263,7 +271,7 @@ class XfbinExporter:
         self.collection: bpy.types.Collection = bpy.data.collections[export_settings.get('collection')]
 
         self.inject_to_xfbin = export_settings.get('inject_to_xfbin')
-
+        self.optimize_meshes = export_settings.get('optimize_meshes')
         self.export_clumps = export_settings.get('export_clumps')
         self.export_meshes = export_settings.get('export_meshes')
         self.export_bones = export_settings.get('export_bones')
@@ -796,6 +804,9 @@ class XfbinExporter:
                     faces[face_index] = [vertices_dict_get(x) for x in verts]
                     face_index += 1
 
+                if self.optimize_meshes:
+                    faces = tristrip.stripify(faces)
+                
                 vertices = list(vertices_dict)
 
                 if len(vertices) < 3:
@@ -803,10 +814,10 @@ class XfbinExporter:
                         {'WARNING'}, f'[NUD MESH] {obj.name} has no valid faces and will be skipped.')
                     continue
 
-                if len(vertices) > NudMesh.MAX_VERTICES:
+                '''if len(vertices) > NudMesh.MAX_VERTICES:
                     self.operator.report(
                         {'WARNING'}, f'[NUD MESH] {obj.name} has {len(vertices)} vertices (limit is {NudMesh.MAX_VERTICES}) and will be skipped.')
-                    continue
+                    continue'''
 
                 if len(faces) > NudMesh.MAX_FACES:
                     self.operator.report(

@@ -263,7 +263,8 @@ class BrNudMesh(BrStruct):
             br.write_uint32(tex_prop)
 
         # Write face count and format
-        br.write_uint16((len(mesh.faces) * 4) - 1)
+        amount_pos = br.pos()
+        br.write_uint16(0)
 
         # Unlike the usual 0x04 and 0x40 formats, CC2 NUDs only support strips (0x04) but this flag is always 0
         br.write_uint8(0)
@@ -272,14 +273,23 @@ class BrNudMesh(BrStruct):
         # Padding
         br.write_uint32([0] * 3)
 
+        faceAmount = 0
         # Write faces
         for face in mesh.faces[:-1]:
-            buffers.polyClump.write_int16((face[2], face[0], face[1]))
+            buffers.polyClump.write_uint16(face)
             buffers.polyClump.write_int16(-1)
+            faceAmount += len(face) + 1
 
         # Write the last triangle (without the -1)
-        buffers.polyClump.write_int16(
-            (mesh.faces[-1][2], mesh.faces[-1][0], mesh.faces[-1][1]))
+        buffers.polyClump.write_int16(mesh.faces[-1])
+        faceAmount += len(mesh.faces[-1])
+
+        
+        # Write the amount of faces
+        with br.seek_to(amount_pos):
+            br.write_uint16(faceAmount)
+        
+        #br.align(0x10)
 
         # Write UV + vertices
         vertex_br = buffers.vertClump
