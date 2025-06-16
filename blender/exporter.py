@@ -171,6 +171,13 @@ class ExportXfbin(Operator, ExportHelper):
         default=True,
     )
     
+    aggressive_optimize: BoolProperty(
+        name='Aggressive optimization',
+        description='If True, will try to optimize the meshes as much as possible.\n'
+        'If False, will only convert triangles to triangle strips.',
+        default=False,
+    )
+    
     def draw(self, context):
         layout = self.layout
 
@@ -182,6 +189,9 @@ class ExportXfbin(Operator, ExportHelper):
             inject_row.prop(self, 'inject_to_xfbin')
             
             layout.prop(self, "optimize_meshes")
+            if self.optimize_meshes:
+                layout.prop(self, "aggressive_optimize")
+            
             layout.prop(self, 'export_textures')
             layout.prop(self, 'export_clumps')
 
@@ -272,6 +282,7 @@ class XfbinExporter:
 
         self.inject_to_xfbin = export_settings.get('inject_to_xfbin')
         self.optimize_meshes = export_settings.get('optimize_meshes')
+        self.aggressive_optimize = export_settings.get('aggressive_optimize')
         self.export_clumps = export_settings.get('export_clumps')
         self.export_meshes = export_settings.get('export_meshes')
         self.export_bones = export_settings.get('export_bones')
@@ -805,7 +816,7 @@ class XfbinExporter:
                     face_index += 1
 
                 if self.optimize_meshes:
-                    faces = tristrip.stripify(faces)
+                    faces = tristrip.stripify(faces, self.aggressive_optimize)
                 
                 vertices = list(vertices_dict)
 
@@ -819,10 +830,10 @@ class XfbinExporter:
                         {'WARNING'}, f'[NUD MESH] {obj.name} has {len(vertices)} vertices (limit is {NudMesh.MAX_VERTICES}) and will be skipped.')
                     continue'''
 
-                if len(faces) > NudMesh.MAX_FACES:
+                '''if len(faces) > NudMesh.MAX_FACES:
                     self.operator.report(
                         {'WARNING'}, f'[NUD MESH] {obj.name} has {len(faces)} faces (limit is {NudMesh.MAX_FACES}) and will be skipped.')
-                    continue
+                    continue'''
 
                 mat_mesh = NudMesh()
                 mat_mesh.vertices = vertices

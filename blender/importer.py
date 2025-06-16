@@ -498,8 +498,7 @@ class XfbinImporter:
             # Create modelhit object
             modelhit_obj = None
             if self.import_modelhit:
-                modelhit_obj = self.make_modelhit(nucc_model.hit_chunk, armature_obj, context)
-            
+                modelhit_obj = self.make_modelhit(nucc_model.hit_chunk, armature_obj, nucc_model.coord_chunk.name, context)
             nud = nucc_model.nud
 
             # Create an empty to store the NUD's properties, and set the armature to be its parent
@@ -653,7 +652,7 @@ class XfbinImporter:
             #    overall_mesh.materials.append(blender_mat)
                     
                     
-    def make_modelhit(self, modelhit: NuccChunkModelHit, armature_obj: Object, context):
+    def make_modelhit(self, modelhit: NuccChunkModelHit, armature_obj: Object, parent_name, context):
 
         if not isinstance(modelhit, NuccChunkModelHit):
             pass
@@ -663,6 +662,8 @@ class XfbinImporter:
             hit_empty = bpy.data.objects.new(f'{modelhit.name}_[HIT]', None)
             hit_empty.empty_display_size = 0
             hit_empty.parent = armature_obj
+            hit_empty.parent_type = 'BONE'
+            hit_empty.parent_bone = parent_name
 
             # link the empty to the collection
             self.collection.objects.link(hit_empty)
@@ -703,8 +704,9 @@ class XfbinImporter:
                 # link the object to the current collection
                 self.collection.objects.link(obj)
 
-                # parent the object to the empty
+                #obj.parent_type = 'BONE'
                 obj.parent = hit_empty
+                #obj.parent_bone = parent_name
 
                 # create a material for the object
                 mat = collision_mat(obj.name)

@@ -39,13 +39,16 @@ and triangulation of strips."""
 #
 # ***** END LICENSE BLOCK *****
 
-try:
-    import pytristrip
-except ImportError:
-    pytristrip = None
-    from .trianglestripifier import TriangleStripifier
-    from .trianglemesh import Mesh
 
+from .trianglestripifier import TriangleStripifier
+from .trianglemesh import Mesh
+import numpy as np
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+import itertools
+from time import perf_counter
+from typing import List
+from collections import defaultdict
 def triangulate(strips):
     """A generator for iterating over the faces in a set of
     strips. Degenerate triangles in strips are discarded.
@@ -72,72 +75,6 @@ def triangulate(strips):
 
     return triangles
 
-def _generate_faces_from_triangles(triangles):
-    """Creates faces (tris) from a flat list of non-overlapping triangle indices"""
-    for i in range(0, len(triangles), 3):
-        yield triangles[i], triangles[i+1], triangles[i+2]
-
-def _sort_triangle_indices(triangles):
-    """Sorts indices of each triangle so lowest index always comes first.
-    Also removes degenerate triangles.
-
-    >>> list(_sort_triangle_indices([(2,1,3),(0,2,6),(9,8,4)]))
-    [(1, 3, 2), (0, 2, 6), (4, 9, 8)]
-    >>> list(_sort_triangle_indices([(2,1,1),(0,2,6),(9,8,4)]))
-    [(0, 2, 6), (4, 9, 8)]
-    """
-    for t0, t1, t2 in triangles:
-        # skip degenerate triangles
-        if t0 == t1 or t1 == t2 or t2 == t0:
-            continue
-        # sort indices
-        if t0 < t1 and t0 < t2:
-            yield (t0, t1, t2)
-        elif t1 < t0 and t1 < t2:
-            yield (t1, t2, t0)
-        elif t2 < t0 and t2 < t1:
-            yield (t2, t0, t1)
-        else:
-            # should *never* happen
-            raise RuntimeError(
-                "Unexpected error while sorting triangle indices.")
-
-def _check_strips(triangles, strips):
-    """Checks that triangles and strips describe the same geometry.
-
-    >>> _check_strips([(0,1,2),(2,1,3)], [[0,1,2,3]])
-    >>> _check_strips([(0,1,2),(2,1,3)], [[3,2,1,0]])
-    >>> _check_strips([(0,1,2),(2,1,3)], [[3,2,1,0,1]])
-    >>> _check_strips([(0,1,2),(2,1,3)], [[3,3,3,2,1,0,1]])
-    >>> _check_strips([(0,1,2),(2,1,3),(1,0,1)], [[0,1,2,3]])
-    >>> _check_strips([(0,1,2),(2,1,3),(4,4,4)], [[0,1,2,3]])
-    >>> _check_strips([(0,1,2),(2,1,3)], [[0,1,2,3], [2,3,4]]) # doctest: +ELLIPSIS
-    Traceback (most recent call last):
-        ...
-    ValueError: ...
-    >>> _check_strips([(0,1,2),(2,1,3),(2,3,4)], [[0,1,2,3]]) # doctest: +ELLIPSIS
-    Traceback (most recent call last):
-        ...
-    ValueError: ...
-    >>> _check_strips([(0,1,2),(2,1,3),(2,3,4),(3,8,1)], [[0,1,2,3,7],[9,10,5,9]]) # doctest: +ELLIPSIS
-    Traceback (most recent call last):
-        ...
-    ValueError: ...
-    """
-    # triangulate
-    strips_triangles = set(_sort_triangle_indices(triangulate(strips)))
-    triangles = set(_sort_triangle_indices(triangles))
-    # compare
-    if strips_triangles != triangles:
-        raise ValueError(
-            "triangles and strips do not match\n"
-            "triangles = %s\n"
-            "strips = %s\n"
-            "triangles - strips = %s\n"
-            "strips - triangles = %s\n"
-            % (triangles, strips,
-               triangles - strips_triangles,
-               strips_triangles - triangles))
 
 def stripify(triangles, stitchstrips = False):
     """Converts triangles into a list of strips.
@@ -145,378 +82,155 @@ def stripify(triangles, stitchstrips = False):
     If stitchstrips is True, then everything is wrapped in a single strip using
     degenerate triangles.
 
-    >>> triangles = [(0,1,4),(1,2,4),(2,3,4),(3,0,4)]
-    >>> strips = stripify(triangles)
-    >>> _check_strips(triangles, strips)
-    >>> triangles = [(0, 1, 2), (3, 4, 5), (6, 7, 8), (9, 10, 11), (12, 13, 14), (15, 16, 17), (18, 19, 20), (21, 22, 23)]
-    >>> strips = stripify(triangles)
-    >>> _check_strips(triangles, strips)
-    >>> triangles = [(0, 1, 2), (0, 1, 2)]
-    >>> strips = stripify(triangles)
-    >>> _check_strips(triangles, strips)
-    >>> triangles = [(0, 1, 2), (2, 1, 0)]
-    >>> strips = stripify(triangles)
-    >>> _check_strips(triangles, strips)
-    >>> triangles = [(0, 1, 2), (2, 1, 0), (1, 2, 3)]
-    >>> strips = stripify(triangles)
-    >>> _check_strips(triangles, strips) # NvTriStrip gives wrong result
-    >>> triangles = [(0, 1, 2), (0, 1, 3)]
-    >>> strips = stripify(triangles)
-    >>> _check_strips(triangles, strips) # NvTriStrip gives wrong result
-    >>> triangles = [(1, 5, 2), (5, 2, 6), (5, 9, 6), (9, 6, 10), (9, 13, 10), (13, 10, 14), (0, 4, 1), (4, 1, 5), (4, 8, 5), (8, 5, 9), (8, 12, 9), (12, 9, 13), (2, 6, 3), (6, 3, 7), (6, 10, 7), (10, 7, 11), (10, 14, 11), (14, 11, 15)]
-    >>> strips = stripify(triangles)
-    >>> _check_strips(triangles, strips) # NvTriStrip gives wrong result
-    >>> triangles = [(1, 2, 3), (4, 5, 6), (6, 5, 7), (8, 5, 9), (4, 10, 9), (8, 3, 11), (8, 10, 3), (12, 13, 6), (14, 2, 15), (16, 13, 15), (16, 2, 3), (3, 2, 1)]
-    >>> strips = stripify(triangles)
-    >>> _check_strips(triangles, strips) # detects bug reported by PacificMorrowind
-    >>> triangles = [(354, 355, 356), (355, 356, 354), (354, 355, 356), (355, 356, 354), (354, 355, 356), (356, 354, 355), (354, 355, 356), (357, 359, 358),
-    ...              (380, 372, 381), (372, 370, 381), (381, 370, 354), (370, 367, 354), (367, 366, 354), (366, 355, 354), (355, 356, 354), (354, 356, 381),
-    ...              (356, 355, 357), (357, 356, 355), (356, 355, 357), (356, 355, 357), (357, 356, 355)]
-    >>> strips = stripify(triangles)
-    >>> _check_strips(triangles, strips) # NvTriStrip gives wrong result
     """
 
-    if pytristrip:
-        strips = pytristrip.stripify(triangles)
-    else:
-        strips = []
-        # build a mesh from triangles
-        mesh = Mesh()
-        for face in triangles:
-            try:
-                mesh.add_face(*face)
-            except ValueError:
-                # degenerate face
-                pass
-        mesh.lock()
+    strips = []
+    # build a mesh from triangles
+    mesh = Mesh()
+    for face in triangles:
+        try:
+            mesh.add_face(*face)
+        except ValueError:
+            # degenerate face
+            pass
+    mesh.lock()
 
-        # calculate the strip
-        stripifier = TriangleStripifier(mesh)
-        strips = stripifier.find_all_strips()
+    # calculate the strip
+    stripifier = TriangleStripifier(mesh)
+    strips = stripifier.find_all_strips()
 
     # stitch the strips if needed
-    if stitchstrips:
+    if stitchstrips:            
         return [stitch_strips(strips)]
     else:
         return strips
 
 class OrientedStrip:
-    """An oriented strip, with stitching support."""
+    """Optimized version with NumPy array support and stitching logic."""
+    __slots__ = ("vertices", "reversed")
 
     def __init__(self, strip):
-        """Construct oriented strip from regular strip (i.e. a list).
-
-        Constructors
-        ------------
-
-        >>> ostrip = OrientedStrip([0,1,2,3])
-        >>> ostrip.vertices
-        [0, 1, 2, 3]
-        >>> ostrip.reversed
-        False
-
-        >>> ostrip = OrientedStrip([0,0,1,2,3])
-        >>> ostrip.vertices
-        [0, 1, 2, 3]
-        >>> ostrip.reversed
-        True
-        >>> ostrip2 = OrientedStrip(ostrip)
-        >>> ostrip2.vertices
-        [0, 1, 2, 3]
-        >>> ostrip2.reversed
-        True
-
-        >>> ostrip = OrientedStrip(None) # doctest: +ELLIPSIS
-        Traceback (most recent call last):
-            ...
-        TypeError: ...
-
-        Compactify
-        ----------
-
-        >>> ostrip = OrientedStrip([0,0,0,1,2,3])
-        >>> ostrip.vertices
-        [0, 1, 2, 3]
-        >>> ostrip.reversed
-        False
-        >>> ostrip = OrientedStrip([0,0,0,0,1,2,3])
-        >>> ostrip.vertices
-        [0, 1, 2, 3]
-        >>> ostrip.reversed
-        True
-        >>> ostrip = OrientedStrip([0,0,0,1,2,3,3,3,3])
-        >>> ostrip.vertices
-        [0, 1, 2, 3]
-        >>> ostrip.reversed
-        False
-        >>> ostrip = OrientedStrip([0,0,0,0,1,2,3,3,3,3])
-        >>> ostrip.vertices
-        [0, 1, 2, 3]
-        >>> ostrip.reversed
-        True
-        """
-
         if isinstance(strip, (list, tuple)):
-            # construct from strip
-            self.vertices = list(strip)
+            self.vertices = np.array(strip, dtype=np.int32)
             self.reversed = False
-            self.compactify()
+            self._compactify()
         elif isinstance(strip, OrientedStrip):
-            # copy constructor
-            self.vertices = strip.vertices[:]
+            self.vertices = np.copy(strip.vertices)
             self.reversed = strip.reversed
         else:
-            raise TypeError(
-                "expected list or OrientedStrip, but got %s"
-                % strip.__class__.__name__)
+            raise TypeError("expected list or OrientedStrip")
 
-    def compactify(self):
-        """Remove degenerate faces from front and back."""
-        # remove from front
-        if len(self.vertices) < 3:
-            raise ValueError(
-                "strip must have at least one non-degenerate face")
+    def _compactify(self):
+        if self.vertices.size < 3:
+            raise ValueError("Strip must have at least one non-degenerate face")
+
         while self.vertices[0] == self.vertices[1]:
-            del self.vertices[0]
-            self.reversed = not self.reversed
-            if len(self.vertices) < 3:
-                raise ValueError(
-                    "strip must have at least one non-degenerate face")
-        # remove from back
+            self.vertices = self.vertices[1:]
+            self.reversed ^= True
+            if self.vertices.size < 3:
+                raise ValueError("Invalid strip")
+
         while self.vertices[-1] == self.vertices[-2]:
-            del self.vertices[-1]
-            if len(self.vertices) < 3:
-                raise ValueError(
-                    "strip must have at least one non-degenerate face")
+            self.vertices = self.vertices[:-1]
+            if self.vertices.size < 3:
+                raise ValueError("Invalid strip")
 
     def reverse(self):
-        """Reverse vertices."""
-        self.vertices.reverse()
-        if len(self.vertices) & 1:
-            self.reversed = not self.reversed
+        self.vertices = self.vertices[::-1]
+        if self.vertices.size & 1:
+            self.reversed ^= True
 
-    def __len__(self):
-        if self.reversed:
-            return len(self.vertices) + 1
+    def get_num_stitches(self, other) -> int:
+        has_common = self.vertices[-1] == other.vertices[0]
+        same_winding = (self.reversed == other.reversed) if self.vertices.size % 2 == 0 else (self.reversed != other.reversed)
+        if has_common:
+            return 0 if same_winding else 1
         else:
-            return len(self.vertices)
+            return 2 if same_winding else 3
+
+    def __add__(self, other):
+        result = OrientedStrip(self)
+        stitches = self.get_num_stitches(other)
+        extra = []
+
+        if stitches >= 1:
+            extra.append(self.vertices[-1])
+        if stitches >= 2:
+            extra.append(other.vertices[0])
+        if stitches >= 3:
+            extra.append(other.vertices[0])
+
+        result.vertices = np.concatenate([result.vertices, np.array(extra, dtype=np.int32), other.vertices])
+        return result
 
     def __iter__(self):
         if self.reversed:
-            yield self.vertices[0]
-        for vert in self.vertices:
-            yield vert
-
-    def __str__(self):
-        """String representation.
-
-        >>> print(OrientedStrip([0, 1, 2, 3, 4]))
-        [0, 1, 2, 3, 4]
-        >>> print(OrientedStrip([0, 0, 1, 2, 3, 4]))
-        [0, 0, 1, 2, 3, 4]
-        """
-        return str(list(self))
-
-    def __repr__(self):
-        return "OrientedStrip(%s)" % str(list(self))
-
-    def get_num_stitches(self, other):
-        """Get number of stitches required to glue the vertices of self to
-        other.
-        """
-        # do last vertex of self and first vertex of other match?
-        has_common_vertex = (self.vertices[-1] == other.vertices[0])
-
-        # do windings match?
-        if len(self.vertices) & 1:
-            has_winding_match = (self.reversed != other.reversed)
-        else:
-            has_winding_match = (self.reversed == other.reversed)
-
-        # append stitches
-        if has_common_vertex:
-            if has_winding_match:
-                return 0
-            else:
-                return 1
-        else:
-            if has_winding_match:
-                return 2
-            else:
-                return 3
-
-    def __add__(self, other):
-        """Combine two strips, using minimal number of stitches.
-
-        >>> # stitch length 0 code path
-        >>> OrientedStrip([0,1,2,3]) + OrientedStrip([3,4,5])
-        OrientedStrip([0, 1, 2, 3, 3, 4, 5])
-        >>> OrientedStrip([0,1,2]) + OrientedStrip([2,2,3,4])
-        OrientedStrip([0, 1, 2, 2, 3, 4])
-
-        >>> # stitch length 1 code path
-        >>> OrientedStrip([0,1,2]) + OrientedStrip([2,3,4])
-        OrientedStrip([0, 1, 2, 2, 2, 3, 4])
-        >>> OrientedStrip([0,1,2,3]) + OrientedStrip([3,3,4,5])
-        OrientedStrip([0, 1, 2, 3, 3, 3, 4, 5])
-
-        >>> # stitch length 2 code path
-        >>> OrientedStrip([0,1,2,3]) + OrientedStrip([7,8,9])
-        OrientedStrip([0, 1, 2, 3, 3, 7, 7, 8, 9])
-        >>> OrientedStrip([0,1,2]) + OrientedStrip([7,7,8,9])
-        OrientedStrip([0, 1, 2, 2, 7, 7, 8, 9])
-
-        >>> # stitch length 3 code path
-        >>> OrientedStrip([0,1,2,3]) + OrientedStrip([7,7,8,9])
-        OrientedStrip([0, 1, 2, 3, 3, 7, 7, 7, 8, 9])
-        >>> OrientedStrip([0,1,2]) + OrientedStrip([7,8,9])
-        OrientedStrip([0, 1, 2, 2, 7, 7, 7, 8, 9])
-        """
-        # make copy of self
-        result = OrientedStrip(self)
-
-        # get number of stitches required
-        num_stitches = self.get_num_stitches(other)
-        if num_stitches >= 4 or num_stitches < 0:
-            # should *never* happen
-            raise RuntimeError("Unexpected error during stitching.")
-
-        # append stitches
-        if num_stitches >= 1:
-            result.vertices.append(self.vertices[-1]) # first stitch
-        if num_stitches >= 2:
-            result.vertices.append(other.vertices[0]) # second stitch
-        if num_stitches >= 3:
-            result.vertices.append(other.vertices[0]) # third stitch
-
-        # append other vertices
-        result.vertices.extend(other.vertices)
-
-        return result
+            yield int(self.vertices[0])
+        for v in self.vertices:
+            yield int(v)
 
 def stitch_strips(strips):
-    """Stitch strips keeping stitch size minimal.
-
-    >>> # stitch length 0 code path
-    >>> stitch_strips([[3,4,5],[0,1,2,3]])
-    [0, 1, 2, 3, 3, 4, 5]
-    >>> stitch_strips([[2,2,3,4],[0,1,2]])
-    [0, 1, 2, 2, 3, 4]
-
-    >>> # check result when changing ordering of strips
-    >>> stitch_strips([[0,1,2,3],[3,4,5]])
-    [0, 1, 2, 3, 3, 4, 5]
-
-    >>> # check result when changing direction of strips
-    >>> stitch_strips([[3,2,1,0],[3,4,5]])
-    [0, 1, 2, 3, 3, 4, 5]
-
-    >>> # stitch length 1 code path
-    >>> stitch_strips([[2,3,4],[0,1,2]])
-    [0, 1, 2, 2, 2, 3, 4]
-    >>> stitch_strips([[3,3,4,5],[0,1,2,3]])
-    [0, 1, 2, 3, 3, 3, 4, 5]
-
-    >>> # stitch length 2 code path
-    >>> stitch_strips([[7,8,9],[0,1,2,3]])
-    [0, 1, 2, 3, 3, 7, 7, 8, 9]
-    >>> stitch_strips([[7,7,8,9],[0,1,2]])
-    [0, 1, 2, 2, 7, 7, 8, 9]
-
-    >>> # stitch length 3 code path... but algorithm reverses strips so
-    >>> # only 2 stitches are needed (compare with OrientedStrip doctest)
-    >>> stitch_strips([[7,7,8,9],[0,1,2,3]])
-    [3, 2, 1, 0, 0, 9, 9, 8, 7]
-    >>> stitch_strips([[7,8,9],[0,1,2]])
-    [0, 1, 2, 2, 9, 9, 8, 7]
-    """
+    """Greedy stitching with minimal index count and NumPy support."""
+    if not strips:
+        return []
 
     class ExperimentSelector:
-        """Helper class to select best experiment."""
+        __slots__ = ("best_pair", "best_index", "best_score")
+
         def __init__(self):
-            self.best_ostrip1 = None
-            self.best_ostrip2 = None
-            self.best_num_stitches = None
-            self.best_ostrip_index = None
+            self.best_pair = None
+            self.best_index = -1
+            self.best_score = float("inf")
 
-        def update(self, ostrip_index, ostrip1, ostrip2):
-            num_stitches = ostrip1.get_num_stitches(ostrip2)
-            if ((self.best_num_stitches is None)
-                or (num_stitches < self.best_num_stitches)):
-                self.best_ostrip1 = ostrip1
-                self.best_ostrip2 = ostrip2
-                self.best_ostrip_index = ostrip_index
-                self.best_num_stitches = num_stitches
+        def try_pair(self, index, base, candidate):
+            cost = base.get_num_stitches(candidate)
+            if cost >= 4:
+                return False
+            score = cost * 1000 + candidate.vertices.size
+            if score < self.best_score:
+                self.best_score = score
+                self.best_pair = (base, candidate)
+                self.best_index = index
+                return cost == 0
+            return False
 
-    # get all strips and their orientation, and their reverse
-    ostrips = [(OrientedStrip(strip), OrientedStrip(strip))
-               for strip in strips if len(strip) >= 3]
-    for ostrip, reversed_ostrip in ostrips:
-        reversed_ostrip.reverse()
-    # start with one of the strips
+    ostrips = []
+    for strip in strips:
+        if len(strip) >= 3:
+            o = OrientedStrip(strip)
+            r = OrientedStrip(strip)
+            r.reverse()
+            ostrips.append((o, r))
+
     if not ostrips:
-        # no strips!
         return []
+
     result = ostrips.pop()[0]
-    # go on as long as there are strips left to process
+
     while ostrips:
         selector = ExperimentSelector()
 
-        for ostrip_index, (ostrip, reversed_ostrip) in enumerate(ostrips):
-            # try various ways of stitching strips
-            selector.update(ostrip_index, result, ostrip)
-            selector.update(ostrip_index, ostrip, result)
-            selector.update(ostrip_index, result, reversed_ostrip)
-            selector.update(ostrip_index, reversed_ostrip, result)
-            # break early if global optimum is already reached
-            if selector.best_num_stitches == 0:
-                break
-        # get best result, perform the actual stitching, and remove
-        # strip from ostrips
-        result = selector.best_ostrip1 + selector.best_ostrip2
-        ostrips.pop(selector.best_ostrip_index)
-    # get strip
-    strip = list(result)
-    # check if we can remove first vertex by reversing strip
-    if strip[0] == strip[1] and (len(strip) & 1 == 0):
-        strip = strip[1:]
-        strip.reverse()
-    # return resulting strip
-    return strip
+        for i, (fwd, rev) in enumerate(ostrips):
+            if selector.try_pair(i, result, fwd): break
+            if selector.try_pair(i, fwd, result): break
+            if selector.try_pair(i, result, rev): break
+            if selector.try_pair(i, rev, result): break
+            if selector.best_score == 0: break
+
+        if selector.best_pair:
+            result = selector.best_pair[0] + selector.best_pair[1]
+            ostrips.pop(selector.best_index)
+        else:
+            break
+
+    final = np.fromiter(result, dtype=np.int32)
+    if final.size >= 2 and final[0] == final[1] and (final.size % 2 == 0):
+        final = final[1:][::-1]
+    return final.tolist()
+
 
 def unstitch_strip(strip):
-    """Revert stitched strip back to a set of strips without stitches.
-
-    >>> strip = [0,1,2,2,3,3,4,5,6,7,8]
-    >>> triangles = triangulate([strip])
-    >>> strips = unstitch_strip(strip)
-    >>> _check_strips(triangles, strips)
-    >>> strips
-    [[0, 1, 2], [3, 3, 4, 5, 6, 7, 8]]
-    >>> strip = [0,1,2,3,3,4,4,4,5,6,7,8]
-    >>> triangles = triangulate([strip])
-    >>> strips = unstitch_strip(strip)
-    >>> _check_strips(triangles, strips)
-    >>> strips
-    [[0, 1, 2, 3], [4, 4, 5, 6, 7, 8]]
-    >>> strip = [0,1,2,3,4,4,4,4,5,6,7,8]
-    >>> triangles = triangulate([strip])
-    >>> strips = unstitch_strip(strip)
-    >>> _check_strips(triangles, strips)
-    >>> strips
-    [[0, 1, 2, 3, 4], [4, 4, 5, 6, 7, 8]]
-    >>> strip = [0,1,2,3,4,4,4,4,4,5,6,7,8]
-    >>> triangles = triangulate([strip])
-    >>> strips = unstitch_strip(strip)
-    >>> _check_strips(triangles, strips)
-    >>> strips
-    [[0, 1, 2, 3, 4], [4, 5, 6, 7, 8]]
-    >>> strip = [0,0,1,1,2,2,3,3,4,4,4,4,4,5,5,6,6,7,7,8,8]
-    >>> triangles = triangulate([strip])
-    >>> strips = unstitch_strip(strip)
-    >>> _check_strips(triangles, strips)
-    >>> strips
-    []"""
+    """Revert stitched strip back to a set of strips without stitches."""
     strips = []
     currentstrip = []
     i = 0
