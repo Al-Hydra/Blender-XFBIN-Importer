@@ -57,46 +57,46 @@ class BrStrmEntry(BrStruct):
 class BrStrmEntryBone(BrStruct):
     def __br_read__(self, br: 'BinaryReader'):
         self.CurveType = br.read_uint32()
-        self.Position = br.read_float(3)
-        self.Rotation = br.read_float(4)
-        self.Scale = br.read_float(3)
-        self.Opacity = br.read_float() #Needs to be checked
+        self.Position = br.read_float32(3)
+        self.Rotation = br.read_float32(4)
+        self.Scale = br.read_float32(3)
+        self.Opacity = br.read_float32() #Needs to be checked
 
 
 class BrStrmEntryCamera(BrStruct):
     def __br_read__(self, br: 'BinaryReader'):
         self.CurveType = br.read_uint32()
-        self.Position = br.read_float(3)
-        self.Rotation = br.read_float(4)
-        self.CameraFOV = br.read_float()
-        self.Scale = br.read_float(3)
+        self.Position = br.read_float32(3)
+        self.Rotation = br.read_float32(4)
+        self.CameraFOV = br.read_float32()
+        self.Scale = br.read_float32(3)
 
 
 class BrStrmEntryMaterial(BrStruct):
     def __br_read__(self, br: 'BinaryReader'):
         self.CurveType = br.read_uint32()
-        self.AmbientColor = br.read_float(16)
+        self.AmbientColor = br.read_float32(16)
 
 
 class BrStrmEntryLightDirc(BrStruct):
     def __br_read__(self, br):
         self.CurveType = br.read_uint32()
-        self.LightColor = br.read_float(3)
-        self.LightIntensity = br.read_float()
-        self.LightDirection = br.read_float(4)
+        self.LightColor = br.read_float32(3)
+        self.LightIntensity = br.read_float32()
+        self.LightDirection = br.read_float32(4)
 
 
 class BrStrmEntryLightPoint(BrStruct):
     def __br_read__(self, br: 'BinaryReader'):
         self.CurveType = br.read_uint32()
-        self.LightColor = br.read_float(3)
-        self.LightPosition = br.read_float(3)
-        self.LightIntensity = br.read_float()
-        self.LightRange = br.read_float()
-        self.LightFalloff = br.read_float()
+        self.LightColor = br.read_float32(3)
+        self.LightPosition = br.read_float32(3)
+        self.LightIntensity = br.read_float32()
+        self.LightRange = br.read_float32()
+        self.LightFalloff = br.read_float32()
 
 class BrStrmEntryAmbient(BrStruct):
     def __br_read__(self, br: 'BinaryReader'):
         self.CurveType = br.read_uint32()
-        self.AmbientColor = br.read_float(4)
+        self.AmbientColor = br.read_float32(4)
 

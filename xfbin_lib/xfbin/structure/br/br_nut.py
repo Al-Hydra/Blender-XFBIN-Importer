@@ -1,5 +1,4 @@
 from ...util import *
-import threading
 
 # Based on Smash Forge Nut implementation
 # https://github.com/jam1garner/Smash-Forge/blob/master/Smash%20Forge/Filetypes/Textures/NUT.cs
@@ -17,7 +16,7 @@ class BrNut(BrStruct):
         self.textures = br.read_struct(BrNutTexture, self.texture_count, self)
 
     def __br_write__(self, br: 'BinaryReader', nut: 'Nut'):
-        br.write_str('NTP3')
+        br.write_str_fixed('NTP3',4)
         br.write_uint16(0x0100)
         br.write_uint16(len(nut.textures))
         br.write_uint64(0)
@@ -133,13 +132,13 @@ class BrNutTexture(BrStruct):
             if (br.pos() - start) % 0x10 != 0:
                 br.write_bytes(b'\x00' * (0x10 - ((br.pos() - start) % 0x10)))
 
-        br.write_str('eXt')
+        br.write_str_fixed('eXt',3)
         br.write_uint8(0)
         br.write_uint32(0x20)
         br.write_uint32(0x10)
         br.write_uint32(0)
 
-        br.write_str('GIDX')
+        br.write_str_fixed('GIDX', 4)
         br.write_uint32(0x10)
         br.write_uint32(0)
         br.write_uint32(0)

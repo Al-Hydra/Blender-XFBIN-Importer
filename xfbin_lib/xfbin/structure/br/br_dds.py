@@ -82,21 +82,23 @@ class BrDDS(BrStruct):
                                 dds.header.pixel_format.dx10_header)
 
             if dds.header.pixel_format.fourCC in ('DXT1', 'DXT3', 'DXT5'):
-                if dds.header.mipMapCount == 0:
+                '''if dds.header.mipMapCount == 0:
                     br.write_bytes(dds.texture_data)
                 else:
                     for i in range(dds.header.mipMapCount):
-                        br.write_bytes(dds.mipmaps[i])
+                        br.write_bytes(dds.mipmaps[i])'''
+                br.write_bytes(dds.texture_data)
 
         elif 'DDPF_RGB' in PixelFormat_Flags.values(dds.header.pixel_format.flags):
             bitcount = dds.header.pixel_format.rgbBitCount
             bitmasks = dds.header.pixel_format.bitmasks
             #if bitmasks in ((0xf800, 0x7e0, 0x1f, 0), (0x7c00, 0x3e0, 0x1f, 0x8000), (0x0f00, 0x00f0, 0x000f, 0xf000), (0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000),(0x00ff0000, 0x0000ff00, 0x000000ff, 0x0) ):
-            if dds.header.mipMapCount == 0:
+            '''if dds.header.mipMapCount == 0:
                 br.write_bytes(dds.texture_data)
             else:
                 for i in range(dds.header.mipMapCount):
-                    br.write_bytes(dds.mipmaps[i])
+                    br.write_bytes(dds.mipmaps[i])'''
+            br.write_bytes(dds.texture_data)
 
 class BrDDS_Header(BrStruct):
     def __br_read__(self, br: BinaryReader):

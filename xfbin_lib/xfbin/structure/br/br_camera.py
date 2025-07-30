@@ -12,4 +12,4 @@ class Camera(BrStruct):
 
     def __br_write__(self, cam_writer: 'BinaryReader'):
         cam_writer.write_int32(self.unk)
-        cam_writer.write_float(self.fov)
+        cam_writer.write_float32(self.fov)

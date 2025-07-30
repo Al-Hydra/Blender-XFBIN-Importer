@@ -310,7 +310,7 @@ class ClumpModelGroup:
         
         for chunk in self.model_chunks:
             # Set the model chunk's respective coord
-            if chunk and chunk.coord_index != -1:
+            if hasattr(chunk, 'coord_index') and chunk.coord_index != -1:
                 chunk.coord_chunk = coord_chunks[chunk.coord_index]
 
     def __iter__(self):

@@ -104,8 +104,8 @@ class BrAnmEntry(BrStruct):
             AnmCurveType.EULERXYZFIXED: self.read_eulerxyzfixed,
             AnmCurveType.EULERINTERPOLATE: self.read_eulerinterpolate,
             AnmCurveType.QUATERNIONLINEAR: self.read_quaternionlinear,
-            AnmCurveType.FLOATFIXED: self.read_floatfixed,
-            AnmCurveType.FLOATLINEAR: self.read_floatlinear,
+            AnmCurveType.FLOATFIXED: self.read_float32fixed,
+            AnmCurveType.FLOATLINEAR: self.read_float32linear,
             AnmCurveType.VECTOR2FIXED: self.read_vector2fixed,
             AnmCurveType.VECTOR2LINEAR: self.read_vector2linear,
             AnmCurveType.OPACITYI16TBL: self.read_opacityi16tbl,
@@ -113,9 +113,9 @@ class BrAnmEntry(BrStruct):
             AnmCurveType.QUATERNIONI16TBL: self.read_quaternioni16tbl,
             AnmCurveType.COLORRGBTBL: self.read_colorrgbtbl,
             AnmCurveType.VECTOR3TBL: self.read_vector3tbl,
-            AnmCurveType.FLOATTBLNI: self.read_floattblni,
+            AnmCurveType.FLOATTBLNI: self.read_float32tblni,
             AnmCurveType.QUATERNIONTBL: self.read_quaterniontbl,
-            AnmCurveType.FLOATTBL: self.read_floattbl,
+            AnmCurveType.FLOATTBL: self.read_float32tbl,
             AnmCurveType.VECTOR3I16LINEAR: self.read_vector3i16linear,
             AnmCurveType.VECTOR3TBL_NOINTERP: self.read_vector3tbl_nointerp,
             AnmCurveType.QUATERNIONI16TBL_NOINTERP: self.read_quaternioni16tbl_nointerp,
@@ -134,35 +134,35 @@ class BrAnmEntry(BrStruct):
 
     def read_vector3fixed(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = br.read_float(3)
+            curve[i] = br.read_float32(3)
 
     def read_vector3linear(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = (br.read_int32(), *br.read_float(3))
+            curve[i] = (br.read_int32(), *br.read_float32(3))
 
     def read_vector3bezier(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = (br.read_int32(), *br.read_float(3))
+            curve[i] = (br.read_int32(), *br.read_float32(3))
 
     def read_eulerxyzfixed(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = br.read_float(3)
+            curve[i] = br.read_float32(3)
 
     def read_eulerinterpolate(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = br.read_float(3)
+            curve[i] = br.read_float32(3)
 
     def read_quaternionlinear(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = (br.read_int32(), *br.read_float(4))
+            curve[i] = (br.read_int32(), *br.read_float32(4))
 
-    def read_floatfixed(self, br, header, curve):
+    def read_float32fixed(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = br.read_float(1)
+            curve[i] = br.read_float32(1)
 
-    def read_floatlinear(self, br, header, curve):
+    def read_float32linear(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = (br.read_int32(), br.read_float())
+            curve[i] = (br.read_int32(), br.read_float32())
 
     def read_vector2fixed(self, br, header, curve):
         for i in range(header.keyframe_count):
@@ -190,27 +190,27 @@ class BrAnmEntry(BrStruct):
 
     def read_vector3tbl(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = br.read_float(3)
+            curve[i] = br.read_float32(3)
 
-    def read_floattblni(self, br, header, curve):
+    def read_float32tblni(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = br.read_float(1)
+            curve[i] = br.read_float32(1)
 
     def read_quaterniontbl(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = br.read_float(4)
+            curve[i] = br.read_float32(4)
 
-    def read_floattbl(self, br, header, curve):
+    def read_float32tbl(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = br.read_float(1)
+            curve[i] = br.read_float32(1)
 
     def read_vector3i16linear(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = (br.read_int16(), *br.read_float(3))
+            curve[i] = (br.read_int16(), *br.read_float32(3))
 
     def read_vector3tbl_nointerp(self, br, header, curve):
         for i in range(header.keyframe_count):
-            curve[i] = br.read_float(3)
+            curve[i] = br.read_float32(3)
 
     def read_quaternioni16tbl_nointerp(self, br, header, curve):
         for i in range(header.keyframe_count):

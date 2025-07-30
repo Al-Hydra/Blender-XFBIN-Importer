@@ -11,6 +11,28 @@ from .common import draw_xfbin_list
 from ...xfbin_lib.xfbin.structure import dds
 from ...xfbin_lib.xfbin.structure.br import br_dds
 
+
+def ensure_texture_context():
+    """Ensure texture context is available by creating material/texture slots if needed"""
+    # This function can be called from operators or other parts of your addon
+    # to ensure the texture tab becomes available
+    if bpy.context.object:
+        obj = bpy.context.object
+        if obj.type == 'MESH':
+            # Ensure object has at least one material
+            if not obj.data.materials:
+                mat = bpy.data.materials.new(name="Material")
+                obj.data.materials.append(mat)
+            
+            # Ensure material has texture slots (this triggers texture context)
+            mat = obj.active_material or obj.data.materials[0]
+            if mat and not hasattr(mat, 'texture_slots') or not mat.texture_slots:
+                # Create a texture to trigger texture context availability
+                tex = bpy.data.textures.new(name="TempTexture", type='IMAGE')
+                # This makes the texture context available in Properties panel
+                if not mat.use_nodes:
+                    mat.use_nodes = True
+
 class XFBIN_UL_TextureList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
@@ -43,6 +65,18 @@ class XFBIN_UL_TexturePreviewList(bpy.types.UIList):
             layout.label(text="", icon='FILE_FOLDER')
             layout.label(text="", icon='TEXTURE')
             layout.label(text="", icon='LINKED')
+
+
+class XFBIN_TexChunks_OT_EnableTextureTab(bpy.types.Operator):
+    """Enable texture tab in Properties panel"""
+    bl_idname = 'xfbin_texchunks.enable_texture_tab'
+    bl_label = 'Enable Texture Tab'
+    bl_description = 'Make the texture tab visible in Properties panel'
+
+    def execute(self, context):
+        ensure_texture_context()
+        self.report({'INFO'}, 'Texture tab should now be visible in Properties panel')
+        return {'FINISHED'}
 
 
 class XFBIN_TexChunks_OT_AddNUT(bpy.types.Operator):
@@ -212,6 +246,7 @@ class NutTexturePropertyGroup(PropertyGroup):
 
     def init_data(self, nut_texture: NutTexture, tex_name, path = ''):
         self.name = tex_name
+        print(f'Initializing Nut Texture: {self.name}')
         self.width = str(nut_texture.width)
         self.height = str(nut_texture.height)
         pixel_format = Pixel_Formats.get(nut_texture.pixel_format)
@@ -344,15 +379,16 @@ class XfbinTextureChunkPropertyPanel(Panel):
     bl_space_type = 'PROPERTIES'
     bl_context = 'texture'
     bl_region_type = 'WINDOW'
-
-    @classmethod
-    def poll(cls, context):
-        obj = context.object
-        return True
+    # Removed poll method to always show panel when texture context is available
 
     def draw(self, context):
         layout = self.layout
         data: TextureChunksListPropertyGroup = bpy.context.scene.xfbin_texture_chunks_data
+        
+        # Add button to ensure texture tab is visible
+        if not data.texture_chunks:
+            layout.operator('xfbin_texchunks.enable_texture_tab', text='Enable Texture Tab', icon='TEXTURE')
+        
         row = layout.row()
         #box = row.box()
         row.template_list('XFBIN_UL_TextureList', 'NUT List', data, 'texture_chunks', data, 'texture_chunk_index', type='DEFAULT')
@@ -459,6 +495,7 @@ texture_chunks_property_groups = (
 
 texture_chunks_classes = (
     *texture_chunks_property_groups,
+    XFBIN_TexChunks_OT_EnableTextureTab,
     XFBIN_TexChunks_OT_AddNUT,
     XFBIN_TexChunks_OT_RemoveNUT,
     XFBIN_TexChunks_OT_MoveNUT,

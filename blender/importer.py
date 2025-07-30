@@ -34,7 +34,6 @@ from .common.helpers import (XFBIN_DYNAMICS_OBJ, XFBIN_ANMS_OBJ, XFBIN_TEXTURES_
 from .materials.shaders import (shaders_dict, collision_mat)
 import cProfile
 
-
 class XFBIN_UL_IMPORT_LIST(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         
@@ -314,7 +313,7 @@ class XfbinImporter:
             
         # Set the Xfbin textures properties
         bpy.context.scene.xfbin_texture_chunks_data.init_data(texture_chunks)
-
+        
         # Import all clump chunks
         for clump in clump_chunks:
 
@@ -492,7 +491,7 @@ class XfbinImporter:
             if isinstance(nucc_model, NuccChunkModelPrimitiveBatch):
                 self.make_primitive_batch(nucc_model, armature_obj, context)
                 continue
-            elif not (isinstance(nucc_model, NuccChunkModel) and nucc_model.nud):
+            elif not (isinstance(nucc_model, NuccChunkModel) and hasattr(nucc_model, 'nud')):
                 continue
 
             # Create modelhit object
@@ -509,9 +508,6 @@ class XfbinImporter:
 
             #create a bmesh to store all the meshes
             bm = bmesh.new()
-
-            # Get the bone range that this NUD uses
-            bone_range = nud.get_bone_range()
 
             # Set the mesh bone as the object's parent bone, if it exists (it should)
             mesh_bone = None
@@ -1076,12 +1072,20 @@ class XfbinImporter:
 
                     for arm_bone in arm_obj.data.bones:
                         #arm_sca[arm_bone.name] = arm_bone.get('scale_signs')
-                        arm_mat[arm_bone.name] = Matrix(arm_bone.get('matrix'))
-                        arm_rot[arm_bone.name] = arm_bone.get('rotation_quat')
-                        arm_loc[arm_bone.name] = arm_bone.get('orig_coords')[0]
-                        arm_sca[arm_bone.name] = arm_bone.get('orig_coords')[2]
-                        arm_blender_mat[arm_bone.name] = arm_bone.matrix
-                        arm_euler[arm_bone.name] = [math.radians(x) for x in arm_bone.get('orig_coords')[1]]
+                        if arm_bone.get('matrix'):
+                            arm_mat[arm_bone.name] = Matrix(arm_bone.get('matrix'))
+                            arm_rot[arm_bone.name] = arm_bone.get('rotation_quat')
+                            arm_loc[arm_bone.name] = arm_bone.get('orig_coords')[0]
+                            arm_sca[arm_bone.name] = arm_bone.get('orig_coords')[2]
+                            arm_blender_mat[arm_bone.name] = arm_bone.matrix
+                            arm_euler[arm_bone.name] = [math.radians(x) for x in arm_bone.get('orig_coords')[1]]
+                        else:
+                            arm_mat[arm_bone.name] = arm_bone.matrix_local
+                            arm_rot[arm_bone.name] = arm_bone.matrix_local.to_quaternion()
+                            arm_loc[arm_bone.name] = arm_bone.head_local
+                            arm_sca[arm_bone.name] = Vector((1, 1, 1))
+                            arm_blender_mat[arm_bone.name] = arm_bone.matrix_local
+                            #arm_euler[arm_bone.name] = [math.radians(x) for x in arm_bone.get('orig_coords')[1]]
 
                         #Set the rotation mode to quaternion
                         pose_bone = arm_obj.pose.bones[arm_bone.name]

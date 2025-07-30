@@ -118,7 +118,7 @@ class BrNuccHeader(BrStruct):
 
     def __br_write__(self, br: 'BinaryReader'):
         # Nothing in the header except for the 8 padding bytes after the nucc ID actually matters
-        br.write_str('NUCC')
+        br.write_str_fixed('NUCC', 4)
         br.write_uint32(0x79)  # nuccID
 
         # Padding

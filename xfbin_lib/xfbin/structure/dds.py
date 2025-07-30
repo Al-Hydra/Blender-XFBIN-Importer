@@ -161,7 +161,7 @@ def NutTexture_to_DDS(nuttex: NutTexture):
 
     header.width = nuttex.width
     header.height = nuttex.height
-    header.mipMapCount = nuttex.mipmap_count
+    header.mipMapCount = 1
 
     # check if nuttex.pixel_format is in nut_pf_fourcc
     if nuttex.pixel_format in nut_pf_fourcc.values():
@@ -181,7 +181,7 @@ def NutTexture_to_DDS(nuttex: NutTexture):
 
         for mip in nuttex.mipmaps:
             dds.mipmaps.append(mip)
-        dds.texture_data = nuttex.texture_data
+        dds.texture_data = bytes(nuttex.texture_data)
 
     elif nuttex.pixel_format in nut_pf_bitmasks.values():
         header.flags |= 0x8  # DDSD_PITCH
@@ -200,16 +200,19 @@ def NutTexture_to_DDS(nuttex: NutTexture):
                 mip = array('h', mip)
                 mip.byteswap()
                 dds.mipmaps.append(mip.tobytes())
-            
-            dds.texture_data = dds.mipmaps[0] 
-            
+
+            texdata = array('h', nuttex.texture_data)
+            texdata.byteswap()
+            dds.texture_data = texdata.tobytes()
+
         elif nuttex.pixel_format in (14, 17):
             for mip in nuttex.mipmaps:
                 mip = array('l', mip)
                 mip.byteswap()
                 dds.mipmaps.append(mip.tobytes())
-            
-            dds.texture_data = dds.mipmaps[0]
+            texdata = array('l', nuttex.texture_data)
+            texdata.byteswap()
+            dds.texture_data = texdata.tobytes()
 
     header.pixel_format.size = 32
     if header.mipMapCount > 1:
@@ -224,7 +227,11 @@ def NutTexture_to_DDS(nuttex: NutTexture):
     header.caps4 = 0
     header.reserved2 = 0
 
+
+    print(len(nuttex.texture_data))
     br = BinaryReader(endianness=Endian.LITTLE)
     br.write_struct(BrDDS(), dds)
+    with open(r"G:\Games\mods\data_win32n\spc\7nrx story mode\tex.dds", "wb") as f:
+        f.write(bytes(br.buffer()))
 
     return bytes(br.buffer())

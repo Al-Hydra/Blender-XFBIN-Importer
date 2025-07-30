@@ -13,7 +13,7 @@ class Ambient(BrStruct):
     unk4: float
 
     def __br_write__(self, ambient_writer: 'BinaryReader'):
-        ambient_writer.write_float(self.unk1)
-        ambient_writer.write_float(self.unk2)
-        ambient_writer.write_float(self.unk3)
-        ambient_writer.write_float(self.unk4)
+        ambient_writer.write_float32(self.unk1)
+        ambient_writer.write_float32(self.unk2)
+        ambient_writer.write_float32(self.unk3)
+        ambient_writer.write_float32(self.unk4)

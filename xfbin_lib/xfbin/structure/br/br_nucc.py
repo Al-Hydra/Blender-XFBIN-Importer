@@ -171,20 +171,20 @@ class BrNuccChunkDynamics(BrNuccChunk):
 # Placeholder names for now
 class BrDynamics1(BrStruct):
     def __br_read__(self, br: 'BinaryReader'):
-        self.Bounciness = br.read_float()
-        self.Elasticity = br.read_float()
-        self.Stiffness = br.read_float()
-        self.Movement = br.read_float()
+        self.Bounciness = br.read_float32()
+        self.Elasticity = br.read_float32()
+        self.Stiffness = br.read_float32()
+        self.Movement = br.read_float32()
 
         # Coord index in the clump's coord indices
         self.coordIndex = br.read_uint16()
         self.BonesCount = br.read_uint16()
 
     def __br_write__(self, br: 'BinaryReader', sec1: 'Dynamics1'):
-        br.write_float(sec1.Bounciness)
-        br.write_float(sec1.Elasticity)
-        br.write_float(sec1.Stiffness)
-        br.write_float(sec1.Movement)
+        br.write_float32(sec1.Bounciness)
+        br.write_float32(sec1.Elasticity)
+        br.write_float32(sec1.Stiffness)
+        br.write_float32(sec1.Movement)
 
         br.write_uint16(sec1.coord_index)
         br.write_uint16(len(sec1.shorts))
@@ -192,12 +192,12 @@ class BrDynamics1(BrStruct):
 
 class BrDynamics2(BrStruct):
     def __br_read__(self, br: 'BinaryReader'):
-        self.offset_x = br.read_float()
-        self.offset_y = br.read_float()
-        self.offset_z = br.read_float()
-        self.scale_x = br.read_float()
-        self.scale_y = br.read_float()
-        self.scale_z = br.read_float()
+        self.offset_x = br.read_float32()
+        self.offset_y = br.read_float32()
+        self.offset_z = br.read_float32()
+        self.scale_x = br.read_float32()
+        self.scale_y = br.read_float32()
+        self.scale_z = br.read_float32()
 
         self.coordIndex = br.read_uint16()
         self.boolflag = br.read_uint16()
@@ -214,12 +214,12 @@ class BrDynamics2(BrStruct):
             self.attached_groups = br.read_uint16(self.attached_groups_count)
 
     def __br_write__(self, br: 'BinaryReader', sec2: 'Dynamics2'):
-        br.write_float(sec2.offset_x)
-        br.write_float(sec2.offset_y)
-        br.write_float(sec2.offset_z)
-        br.write_float(sec2.scale_x)
-        br.write_float(sec2.scale_y)
-        br.write_float(sec2.scale_z)
+        br.write_float32(sec2.offset_x)
+        br.write_float32(sec2.offset_y)
+        br.write_float32(sec2.offset_z)
+        br.write_float32(sec2.scale_x)
+        br.write_float32(sec2.scale_y)
+        br.write_float32(sec2.scale_z)
 
         br.write_uint16(sec2.coord_index)
         br.write_uint16(sec2.attach_groups)
@@ -244,7 +244,7 @@ class BrNuccChunkClump(BrNuccChunk):
         self.coordFlag1 = br.read_uint8()
 
         if self.field00 == 2:
-            self.bounding_box = br.read_float(6)
+            self.bounding_box = br.read_float32(6)
             br.read_uint32()
 
         # Signed because root node's parent index is -1
@@ -277,7 +277,7 @@ class BrNuccChunkClump(BrNuccChunk):
         br.write_uint8(self.nuccChunk.coord_flag1)
 
         if self.nuccChunk.field00 == 2:
-            br.write_float(self.nuccChunk.bounding_box)
+            br.write_float32(self.nuccChunk.bounding_box)
             br.write_uint32(0)
 
         # Enumerate the coord chunks because the parent indices are respective to the local coord indices list, not the page indices
@@ -318,7 +318,7 @@ class BrClumpModelGroup(BrStruct):
             self.flag1 = br.read_uint8()
 
             # LOD Distance
-            self.unk = br.read_float()
+            self.unk = br.read_float32()
 
             self.modelIndices = list()
             for _ in range(self.modelCount):
@@ -332,7 +332,7 @@ class BrClumpModelGroup(BrStruct):
         br.write_uint8(model_group.flag0)
         br.write_uint8(model_group.flag1)
 
-        br.write_float(model_group.unk)
+        br.write_float32(model_group.unk)
 
         br.write_int32(tuple(map(lambda x: chunkIndexDict.get_or_next(
             x) if x else -1, model_group.model_chunks)))
@@ -383,7 +383,7 @@ class BrNuccChunkModel(BrNuccChunk):
             self.nudSize = br.read_uint32()
 
         if self.attributes & 0x04:
-            self.boundingBox = br.read_float(6)
+            self.boundingBox = br.read_float32(6)
         
         self.nud_pos = br.pos()
         self.nud_data = br.read_bytes(self.nudSize)
@@ -420,7 +420,7 @@ class BrNuccChunkModel(BrNuccChunk):
             br.write_uint32(br_internal.size())
 
             # Write the flag1 floats, if they exist
-            br.write_float(self.nuccChunk.bounding_box)
+            br.write_float32(self.nuccChunk.bounding_box)
 
             # Write NUD buffer
             br.extend(br_internal.buffer())
@@ -442,25 +442,25 @@ class BrNuccChunkMaterial(BrNuccChunk):
 
         self.alpha = br.read_uint8()
         br.read_uint8()
-        self.glare = br.read_float()
+        self.glare = br.read_float32()
 
         self.flags = br.read_uint32()
         
         if self.flags & 0x01:
-            self.UV0 = br.read_float(4)
+            self.UV0 = br.read_float32(4)
         if self.flags & 0x02:
-            self.UV1 = br.read_float(4)
+            self.UV1 = br.read_float32(4)
         if self.flags & 0x04:
-            self.UV2 = br.read_float(4)
+            self.UV2 = br.read_float32(4)
         if self.flags & 0x08:
-            self.UV3 = br.read_float(4)
+            self.UV3 = br.read_float32(4)
         if self.flags & 0x10:
-            self.BlendRate = br.read_float()
-            self.BlendType = br.read_float()
+            self.BlendRate = br.read_float32()
+            self.BlendType = br.read_float32()
         if self.flags & 0x20:
-            self.fallOff = br.read_float()
+            self.fallOff = br.read_float32()
         if self.flags & 0x40:
-            self.outlineID = br.read_float()
+            self.outlineID = br.read_float32()
 
 
         self.textureGroups = br.read_struct(
@@ -472,25 +472,25 @@ class BrNuccChunkMaterial(BrNuccChunk):
         br.write_uint8(self.nuccChunk.alpha)
         br.write_uint8(0)
 
-        br.write_float(self.nuccChunk.glare)
+        br.write_float32(self.nuccChunk.glare)
 
         br.write_uint32(self.nuccChunk.flags)
 
         if self.nuccChunk.flags & 0x01:
-            br.write_float(self.nuccChunk.UV0)
+            br.write_float32(self.nuccChunk.UV0)
         if self.nuccChunk.flags & 0x02:
-            br.write_float(self.nuccChunk.UV1)
+            br.write_float32(self.nuccChunk.UV1)
         if self.nuccChunk.flags & 0x04:
-            br.write_float(self.nuccChunk.UV2)
+            br.write_float32(self.nuccChunk.UV2)
         if self.nuccChunk.flags & 0x08:
-            br.write_float(self.nuccChunk.UV3)
+            br.write_float32(self.nuccChunk.UV3)
         if self.nuccChunk.flags & 0x10:
-            br.write_float(self.nuccChunk.BlendRate)
-            br.write_float(self.nuccChunk.BlendType)
+            br.write_float32(self.nuccChunk.BlendRate)
+            br.write_float32(self.nuccChunk.BlendType)
         if self.nuccChunk.flags & 0x20:
-            br.write_float(self.nuccChunk.fallOff)
+            br.write_float32(self.nuccChunk.fallOff)
         if self.nuccChunk.flags & 0x40:
-            br.write_float(self.nuccChunk.outlineID)
+            br.write_float32(self.nuccChunk.outlineID)
         
 
         for group in self.nuccChunk.texture_groups:
@@ -523,10 +523,10 @@ class BrNuccChunkCoord(BrNuccChunk):
     def init_data(self, br: BinaryReader):
         super().init_data(br)
 
-        self.position = br.read_float(3)
-        self.rotation = br.read_float(3)  # Rotation is in euler
-        self.scale = br.read_float(3)
-        self.opacity = br.read_float()   # Might be part of scale
+        self.position = br.read_float32(3)
+        self.rotation = br.read_float32(3)  # Rotation is in euler
+        self.scale = br.read_float32(3)
+        self.opacity = br.read_float32()   # Might be part of scale
         if self.version > 0x66:
             self.flags = br.read_uint16()  # Not always 0
         else:
@@ -535,10 +535,10 @@ class BrNuccChunkCoord(BrNuccChunk):
     def __br_write__(self, br: 'BinaryReader', chunkIndexDict: IterativeDict):
         node = self.nuccChunk.node
 
-        br.write_float(node.position)
-        br.write_float(node.rotation)
-        br.write_float(node.scale)
-        br.write_float(node.opacity)
+        br.write_float32(node.position)
+        br.write_float32(node.rotation)
+        br.write_float32(node.scale)
+        br.write_float32(node.opacity)
         br.write_uint16(node.flags)
 
 
@@ -569,7 +569,7 @@ class BrModelHit(BrStruct):
             br.seek(8, 1)
         
         self.vertex_count = self.mesh_vertex_size * 3
-        self.mesh_vertices = [br.read_float(3)
+        self.mesh_vertices = [br.read_float32(3)
                               for i in range(self.vertex_count)]
 
     def __br_write__(self, br: 'BinaryReader', hit: 'ModelHit'):
@@ -577,13 +577,70 @@ class BrModelHit(BrStruct):
         br.write_uint8(hit.unk_count)
         br.write_uint8(hit.flags)
         for vertices in hit.mesh_vertices:
-            br.write_float(vertices)
+            br.write_float32(vertices)
 
 
 class BrNuccChunkBillboard(BrNuccChunk):
-    def init_data(self, br: BinaryReader):
-        super().init_data(br)
-        self.data = br.read_uint8(len(br.buffer()))
+    def __br_read__(self, br: 'BinaryReader', version):
+        self.model_index = br.read_uint32()
+        self.flags = br.read_uint32()
+        self.frame_count = br.read_uint16()
+        self.local_68 = br.read_uint16()  # Unused?
+        
+        self.thirty_two = br.read_uint32()  # Unused?
+        
+        pos_flag = (self.flags >> 1) & 0x3
+        rot_flag = (self.flags >> 3) & 0x3
+        scale_flag = (self.flags >> 5) & 0x3
+        opacity_flag = (self.flags >> 7) & 0x3
+        uv1_flag = (self.flags >> 9) & 0x3
+        wh1_flag = (self.flags >> 11) & 0x3
+        uv2_flag = (self.flags >> 13) & 0x3
+        wh2_flag = (self.flags >> 15) & 0x3
+        blend_rate_flag = (self.flags >> 17) & 0x3
+        blend_rate2_flag = (self.flags >> 19) & 0x3
+        glare_rate_flag = (self.flags >> 21) & 0x3
+        alpha_ref_flag = (self.flags >> 23) & 0x3
+        outline_id_flag = (self.flags >> 25) & 0x3
+        
+        if pos_flag:
+            self.position_frames = [br.read_float32(3) for _ in range(self.frame_count)]
+        
+        if rot_flag:
+            self.rotation_frames = [br.read_float32(3) for _ in range(self.frame_count)]
+
+        if scale_flag:
+            self.scale_frames = [br.read_float32(3) for _ in range(self.frame_count)]
+
+        if opacity_flag:
+            self.opacity_frames = [br.read_float32() for _ in range(self.frame_count)]
+        
+        if uv1_flag:
+            self.uv1_frames = [br.read_float32(2) for _ in range(self.frame_count)]
+        
+        if wh1_flag:
+            self.wh1_frames = [br.read_float32(2) for _ in range(self.frame_count)]
+        
+        if uv2_flag:
+            self.uv2_frames = [br.read_float32(2) for _ in range(self.frame_count)]
+        
+        if wh2_flag:
+            self.wh2_frames = [br.read_float32(2) for _ in range(self.frame_count)]
+        
+        if blend_rate_flag:
+            self.blend_rate_frames = [br.read_float32() for _ in range(self.frame_count)]
+        
+        if blend_rate2_flag:
+            self.blend_rate2_frames = [br.read_float32() for _ in range(self.frame_count)]
+        
+        if glare_rate_flag:
+            self.glare_rate_frames = [br.read_float32() for _ in range(self.frame_count)]
+            
+        if alpha_ref_flag:
+            self.alpha_ref_frames = [br.read_float32() for _ in range(self.frame_count)]
+        
+        if outline_id_flag:
+            self.outline_id_frames = [br.read_float32() for _ in range(self.frame_count)]
 
     def __br_write__(self, br: 'BinaryReader', chunkIndexDict: IterativeDict):
         br.write_uint8(self.nuccChunk.data)
@@ -600,7 +657,7 @@ class BrNuccChunkModelPrimitiveBatch(BrNuccChunk):
         self.unk3 = br.read_uint64(2)
         self.shader_id = br.read_uint32()
         self.unk4 = br.read_uint64()
-        self.unk5 = br.read_float()
+        self.unk5 = br.read_float32()
 
         self.meshes = br.read_struct(BrPrimitiveBatchMesh, self.mesh_count)
 
@@ -615,8 +672,8 @@ class BrPrimitiveBatchMesh(BrStruct):
 class BrNuccChunkPrimitiveVertex(BrNuccChunk):
     def init_data(self, br: BinaryReader):
         super().init_data(br)
-
-        self.unk = br.read_uint64()
+        self.batchIndex = br.read_uint32()
+        self.vertexType = br.read_uint32()  # 0x30 for 48 bytes, 0x40 for 64 bytes
         self.vertex_size = br.read_uint32()
         self.vertex_count = br.read_uint32()
 
@@ -628,23 +685,23 @@ class BrNuccChunkPrimitiveVertex(BrNuccChunk):
 
 class BrPrimitiveVertex64(BrStruct):
     def __br_read__(self, br: BinaryReader):
-        self.position = br.read_float(3)
+        self.position = br.read_float32(3)
         br.seek(4, 1)
-        self.normal = br.read_float(3)
+        self.normal = br.read_float32(3)
         br.seek(4, 1)
-        self.color = br.read_float(4)
-        self.uv = br.read_float(2)
+        self.color = br.read_float32(4)
+        self.uv = br.read_float32(2)
         br.seek(8, 1)
 
 
 class BrPrimitiveVertex48(BrStruct):
     def __br_read__(self, br: BinaryReader):
-        self.position = br.read_float(3)
+        self.position = br.read_float32(3)
         br.seek(4, 1)
-        self.normal = br.read_float(3)
+        self.normal = br.read_float32(3)
         br.seek(4, 1)
         self.color = (1.0, 1.0, 1.0, 1.0)
-        self.uv = br.read_float(2)
+        self.uv = br.read_float32(2)
         br.seek(8, 1)
 
 
@@ -713,7 +770,7 @@ class BrNuccChunkCamera(BrNuccChunk):
         super().init_data(br)
 
         self.unk = br.read_uint32()
-        self.fov = br.read_float()
+        self.fov = br.read_float32()
 
 
 class BrNuccChunkLightDirc(BrNuccChunk):
@@ -733,5 +790,5 @@ class BrNuccChunkAmbient(BrNuccChunk):
     def init_data(self, br: BinaryReader):
         super().init_data(br)
 
-        self.color = br.read_float(3)
-        self.strength = br.read_float()
+        self.color = br.read_float32(3)
+        self.strength = br.read_float32()

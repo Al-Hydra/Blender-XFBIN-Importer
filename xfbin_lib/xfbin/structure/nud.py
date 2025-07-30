@@ -2,7 +2,7 @@ from itertools import chain
 from typing import List, Tuple
 
 from .br.br_nud import *
-
+import numpy as np
 
 class Nud:
     name: str  # chunk name
@@ -26,11 +26,13 @@ class Nud:
 
         lower = 0xFF_FF
         higher = 0
-        for mesh in [m for m in self.mesh_groups[0].meshes if m.vertices and m.vertices[0].bone_ids]:
-            lower = min(lower, min(
-                chain(*map(lambda x: x.bone_ids, mesh.vertices))))
-            higher = max(higher, max(
-                chain(*map(lambda x: x.bone_ids, mesh.vertices))))
+        for mesh in [m for m in self.mesh_groups[0].meshes if m.vertices is not None and m.vertices.size > 0 and 'bone_ids' in m.vertices.dtype.names]:
+            bone_ids = mesh.vertices['bone_ids']
+            if bone_ids.size > 0:
+                mesh_min = np.min(bone_ids)
+                mesh_max = np.max(bone_ids)
+                lower = min(lower, mesh_min)
+                higher = max(higher, mesh_max)
 
         if lower > higher:
             return (0, 0)
@@ -78,13 +80,20 @@ class NudMesh:
         self.face_flag = br_mesh.faceFlag
 
     def has_bones(self):
-        return bool(self.vertices and self.vertices[0].bone_ids)
+        #check if the numpy array has bone ids
+        return self.vertices is not None and self.vertices.size > 0 and self.vertices["bone_ids"].any()
 
     def has_color(self):
-        return bool(self.vertices and self.vertices[0].color)
+        return self.vertices is not None and self.vertices.size > 0 and self.vertices["color"].any()
 
     def get_uv_channel_count(self):
-        return len(self.vertices[0].uv) if bool(self.vertices and self.vertices[0].uv) else 0
+        count = 0
+        for i in range(4):
+            field_name = f"uv{i}"
+            if field_name in self.vertices.dtype.names:
+                if np.any(self.vertices[field_name]):
+                    count += 1
+        return count
 
     def add_vertices(self, vertices: List[BrNudVertex]):
         self.vertices = list()
@@ -139,16 +148,10 @@ class NudMesh:
 
 
 class NudVertex:
-    position: Tuple[float, float, float]
-    normal: Tuple[float, float, float]
-    bitangent: Tuple[float, float, float]
-    tangent: Tuple[float, float, float]
-
-    color: Tuple[int, int, int, int]
-    uv: List[Tuple[float, float]]
-
-    bone_ids: Tuple[int, int, int, int]
-    bone_weights: Tuple[float, float, float, float]
+    __slots__ = (
+        "position", "normal", "bitangent", "tangent",
+        "color", "uv", "bone_ids", "bone_weights"
+    )
 
     def init_data(self, br_vertex: BrNudVertex):
         self.position = br_vertex.position
@@ -163,18 +166,29 @@ class NudVertex:
         self.bone_ids = br_vertex.boneIds
         self.bone_weights = br_vertex.boneWeights
 
-    def __eq__(self, o: 'NudVertex') -> bool:
-        return all(map(lambda x, y: x == y, self.position, o.position)) \
-            and all(map(lambda x, y: x == y, self.normal, o.normal)) \
-            and all(map(lambda x, y: all(map(lambda a, b: a == b, x, y)), self.uv, o.uv)) \
-            and all(map(lambda x, y: x == y, self.tangent, o.tangent)) \
-            and all(map(lambda x, y: x == y, self.bitangent, o.bitangent)) \
-            and all(map(lambda x, y: x == y, self.color, o.color)) \
-            and all(map(lambda x, y: x == y, self.bone_ids, o.bone_ids)) \
-            and all(map(lambda x, y: x == y, self.bone_weights, o.bone_weights))
+    def __eq__(self, other: 'NudVertex') -> bool:
+        return (
+            self.position == other.position and
+            self.normal == other.normal and
+            self.bitangent == other.bitangent and
+            self.tangent == other.tangent and
+            self.color == other.color and
+            self.uv == other.uv and
+            self.bone_ids == other.bone_ids and
+            self.bone_weights == other.bone_weights
+        )
 
     def __hash__(self) -> int:
-        return hash(tuple(self.position)) ^ hash(tuple(self.normal)) ^ hash(tuple(self.color)) ^ hash(tuple(self.uv))
+        return hash((
+            tuple(self.position),
+            tuple(self.normal),
+            tuple(self.bitangent),
+            tuple(self.tangent),
+            tuple(self.color),
+            tuple(self.uv),  # assume self.uv is already a tuple of tuples
+            tuple(self.bone_ids),
+            tuple(self.bone_weights),
+        ))
 
 
 class NudMaterial:

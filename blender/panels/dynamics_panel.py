@@ -221,36 +221,11 @@ class SpringGroupsPropertyGroup(PropertyGroup):
         sg_list = [sg for sg in context.object.xfbin_dynamics_data.spring_groups]
         sg_list.pop(context.object.xfbin_dynamics_data.sg_index)
         if bone:
-            
-            #check if one of the bones in the spring group has more than one child
-            for child in bone.children_recursive:
-                if len(child.children) > 1:
-                    self.name = f'({child.name}) a child of ({bone.name}) has more than one child'
-                    self.bone_count = 0
-                    return
-            
-            #check if this bone or one of its children is already in a spring group
-            for s in sg_list:
-                
-                #check if the bone is already in a spring group
-                if s.bone_spring == bone.name:
-                    self.name = f'({bone.name}) is already in a spring group'
-                    return                
-
-                #check if the bone is a child of a bone in a spring group
-                elif bone in armature_obj.data.bones[s.bone_spring].children_recursive:
-                    self.name = f'({bone.name}) is a child of ({s.bone_spring}) which is already in a spring group'
-                    self.bone_count = 0
-                    return
-                
             #update the bone index, count and name
             self.bone_count = len(bone.children_recursive) + 1
             self.name = f'{bone.name}'
             self.spring_group_index = 0
-        else:
-            self.name = f'{self.bone_spring} is not a valid bone'
-            self.bone_count = 0
-            return
+
         
 
     bone_index: IntProperty(
