@@ -227,11 +227,7 @@ def NutTexture_to_DDS(nuttex: NutTexture):
     header.caps4 = 0
     header.reserved2 = 0
 
-
-    print(len(nuttex.texture_data))
     br = BinaryReader(endianness=Endian.LITTLE)
     br.write_struct(BrDDS(), dds)
-    with open(r"G:\Games\mods\data_win32n\spc\7nrx story mode\tex.dds", "wb") as f:
-        f.write(bytes(br.buffer()))
 
     return bytes(br.buffer())
