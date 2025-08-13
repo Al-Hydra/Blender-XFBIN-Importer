@@ -702,21 +702,11 @@ class XfbinExporter:
             chunk.nud.bounding_sphere = pos_m_to_cm_tuple([*center, radius])
             mesh_group.bounding_sphere = pos_m_to_cm_tuple([*center, radius])
             mesh_group.unk_values = nud_data.unk_values
-            #set the current object as the active object
-            #context.view_layer.objects.active = obj
-            #bpy.ops.object.mode_set(mode='OBJECT')
+
 
             # Generate a mesh with modifiers applied, and put it into a bmesh
             mesh: Mesh = obj.evaluated_get(context.evaluated_depsgraph_get()).to_mesh()
             mesh.transform(obj.matrix_world)
-            #triangulate
-            bm = bmesh.new()
-            bm.from_mesh(mesh)
-
-            bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
-
-            bm.to_mesh(mesh)
-            bm.free()
             
 
             # Transform the mesh by the inverse of its bone's matrix, if it was not parented to it
@@ -725,30 +715,23 @@ class XfbinExporter:
             elif mesh_bone:
                 mesh.transform(mesh_bone.matrix_local.inverted())
 
-            #triangulate the mesh
-            mesh.calc_loop_triangles()
-
-            #calculate tangents
-            mesh.calc_tangents()
-
             def extract_loop_data_numpy(mesh_obj, mesh, bone_name_to_index, max_influences=4):
                 mesh.calc_loop_triangles()
+                
 
                 num_loops = len(mesh.loops)
                 num_verts = len(mesh.vertices)
-                num_tris = len(mesh.loop_triangles)
-
-                # === Get vertex indices for loops ===
-                vertex_indices = np.empty(num_loops, dtype=np.int32)
-                mesh.loops.foreach_get("vertex_index", vertex_indices)
+                num_tris  = len(mesh.loop_triangles)
 
                 # === Allocate NumPy arrays ===
-                loop_normals = np.empty((num_loops, 3), dtype=np.float32)
-                positions = np.empty((num_loops, 3), dtype=np.float32)
-                tangents = np.empty((num_loops, 3), dtype=np.float32)
-                colors = np.zeros((num_loops, 4), dtype=np.float32)
-                uvs = [np.zeros((num_loops, 2), dtype=np.float32) for _ in range(len(mesh.uv_layers))]
+                vertex_indices = np.empty(num_loops, dtype=np.int32)
+                loop_normals   = np.empty((num_loops, 3), dtype=np.float32)
+                positions      = np.empty((num_loops, 3), dtype=np.float32)
+                tangents       = np.empty((num_loops, 3), dtype=np.float32)
+                colors         = np.zeros((num_loops, 4), dtype=np.float32)
+                uvs            = [np.zeros((num_loops, 2), dtype=np.float32) for _ in range(len(mesh.uv_layers))]
 
+                mesh.loops.foreach_get("vertex_index", vertex_indices)
                 mesh.loops.foreach_get("normal", loop_normals.ravel())
 
                 for uv_index, uv_layer in enumerate(mesh.uv_layers):
@@ -756,6 +739,7 @@ class XfbinExporter:
                     uvs[uv_index][:, 1] = 1 - uvs[uv_index][:, 1]  # Flip Y
 
                 if mesh.color_attributes:
+                    # requires Blender 4.x 'color_srgb'
                     mesh.color_attributes[0].data.foreach_get("color_srgb", colors.ravel())
                     colors = (colors[:, :4] * 255).astype(np.uint8)
 
@@ -763,21 +747,26 @@ class XfbinExporter:
                 vert_positions = np.empty((num_verts, 3), dtype=np.float32)
                 mesh.vertices.foreach_get("co", vert_positions.ravel())
                 positions[:] = vert_positions[vertex_indices] * 100.0  # Scale to cm
-                
-                # Handle normals/tangents
-                if hasattr(self, 'normals_as_tangents') and self.normals_as_tangents:
+
+                # === Tangents or "normals as tangents" ===
+                if getattr(self, "normals_as_tangents", False):
                     mesh2 = mesh.copy()
-                    # reset normals
                     if mesh2.attributes.get("custom_normal"):
                         mesh2.attributes.remove(mesh2.attributes["custom_normal"])
-
                     vert_normals = np.empty((num_verts, 3), dtype=np.float32)
                     mesh2.vertices.foreach_get("normal", vert_normals.ravel())
                     tangents[:] = vert_normals[vertex_indices]
                     bpy.data.meshes.remove(mesh2)
                 else:
-                    mesh.calc_tangents()
-                    mesh.loops.foreach_get("tangent", tangents.ravel())
+                    #triangulate the mesh before calculating tangents
+                    mesh2 = mesh.copy()
+                    bm = bmesh.new()
+                    bm.from_mesh(mesh2)
+                    bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
+                    bm.to_mesh(mesh2)
+                    bm.free()
+                    mesh2.calc_tangents()
+                    mesh2.loops.foreach_get("tangent", tangents.ravel())
 
                 # === Process bone weights efficiently ===
                 vertex_groups = mesh_obj.vertex_groups
