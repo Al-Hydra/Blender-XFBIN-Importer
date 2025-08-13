@@ -405,6 +405,7 @@ class BrNudMesh(BrStruct):
                 vertex_buffer['bitangents'] = bitangent_data
 
         # Fill bone data - only if fields exist
+        #check if there's bone_ids that exceed 255
         if 'bone_ids' in vertex_buffer.dtype.names and 'bone_ids' in verts.dtype.names:
             vertex_buffer['bone_ids'] = verts['bone_ids'].astype(vertex_buffer['bone_ids'].dtype.base)
 

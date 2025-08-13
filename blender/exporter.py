@@ -703,8 +703,8 @@ class XfbinExporter:
             mesh_group.bounding_sphere = pos_m_to_cm_tuple([*center, radius])
             mesh_group.unk_values = nud_data.unk_values
             #set the current object as the active object
-            context.view_layer.objects.active = obj
-            bpy.ops.object.mode_set(mode='OBJECT')
+            #context.view_layer.objects.active = obj
+            #bpy.ops.object.mode_set(mode='OBJECT')
 
             # Generate a mesh with modifiers applied, and put it into a bmesh
             mesh: Mesh = obj.evaluated_get(context.evaluated_depsgraph_get()).to_mesh()
@@ -738,34 +738,34 @@ class XfbinExporter:
                 num_verts = len(mesh.vertices)
                 num_tris = len(mesh.loop_triangles)
 
-                # === Allocate NumPy arrays ===
+                # === Get vertex indices for loops ===
                 vertex_indices = np.empty(num_loops, dtype=np.int32)
+                mesh.loops.foreach_get("vertex_index", vertex_indices)
+
+                # === Allocate NumPy arrays ===
                 loop_normals = np.empty((num_loops, 3), dtype=np.float32)
                 positions = np.empty((num_loops, 3), dtype=np.float32)
                 tangents = np.empty((num_loops, 3), dtype=np.float32)
                 colors = np.zeros((num_loops, 4), dtype=np.float32)
                 uvs = [np.zeros((num_loops, 2), dtype=np.float32) for _ in range(len(mesh.uv_layers))]
 
-                mesh.loops.foreach_get("vertex_index", vertex_indices)
                 mesh.loops.foreach_get("normal", loop_normals.ravel())
 
                 for uv_index, uv_layer in enumerate(mesh.uv_layers):
                     uv_layer.data.foreach_get("uv", uvs[uv_index].ravel())
                     uvs[uv_index][:, 1] = 1 - uvs[uv_index][:, 1]  # Flip Y
-                
 
                 if mesh.color_attributes:
                     mesh.color_attributes[0].data.foreach_get("color_srgb", colors.ravel())
                     colors = (colors[:, :4] * 255).astype(np.uint8)
-
 
                 # === Vertex positions (transformed) ===
                 vert_positions = np.empty((num_verts, 3), dtype=np.float32)
                 mesh.vertices.foreach_get("co", vert_positions.ravel())
                 positions[:] = vert_positions[vertex_indices] * 100.0  # Scale to cm
                 
-                # we need a copy of the mesh without the custom normals for outlines
-                if self.normals_as_tangents:
+                # Handle normals/tangents
+                if hasattr(self, 'normals_as_tangents') and self.normals_as_tangents:
                     mesh2 = mesh.copy()
                     # reset normals
                     if mesh2.attributes.get("custom_normal"):
@@ -773,64 +773,49 @@ class XfbinExporter:
 
                     vert_normals = np.empty((num_verts, 3), dtype=np.float32)
                     mesh2.vertices.foreach_get("normal", vert_normals.ravel())
-                    # swizzle to match the target format
                     tangents[:] = vert_normals[vertex_indices]
-                    # remove mesh2
                     bpy.data.meshes.remove(mesh2)
                 else:
-                    # === Tangents ===
                     mesh.calc_tangents()
-                    tangents = np.empty((num_loops, 3), dtype=np.float32)
                     mesh.loops.foreach_get("tangent", tangents.ravel())
 
-                # === Fast Bone Weights ===
+                # === Process bone weights efficiently ===
                 vertex_groups = mesh_obj.vertex_groups
-                bone_ids = np.zeros((num_loops, max_influences), dtype=np.uint16)
-                weights = np.zeros((num_loops, max_influences), dtype=np.float32)
-
-                # Flatten weight data
-                weight_data = []
-                for v in mesh.vertices:
-                    for g in v.groups:
-                        name = vertex_groups[g.group].name
-                        if name in bone_name_to_index:
-                            weight_data.append((v.index, bone_name_to_index[name], g.weight))
-
-                if weight_data:
-                    weight_data = np.array(weight_data, dtype=np.float32)
-                    vi = weight_data[:, 0].astype(np.int32)
-                    bi = weight_data[:, 1].astype(np.int32)
-                    w  = weight_data[:, 2]
-
-                    structured = np.zeros(len(weight_data), dtype=[('v', np.int32), ('b', np.int32), ('w', np.float32)])
-                    structured['v'] = vi
-                    structured['b'] = bi
-                    structured['w'] = w
-
-                    sorted_data = np.sort(structured, order=['v', 'w'])[::-1]
-
-                    v_bone_ids = np.zeros((num_verts, max_influences), dtype=np.uint16)
-                    v_weights = np.zeros((num_verts, max_influences), dtype=np.float32)
-                    counts = np.zeros((num_verts,), dtype=np.int32)
-
-                    for entry in sorted_data:
-                        v = entry['v']
-                        i = counts[v]
-                        if i < max_influences:
-                            v_bone_ids[v, i] = entry['b']
-                            v_weights[v, i] = entry['w']
-                            counts[v] += 1
-
-                    # Normalize
-                    total = v_weights.sum(axis=1, keepdims=True)
-                    v_weights /= total + 1e-8
-
-                    # Broadcast to loops
-                    bone_ids[:] = v_bone_ids[vertex_indices]
-                    weights[:] = v_weights[vertex_indices]
-                else:
-                    # No weights? fallback to (0, 0, 0, 1)
-                    weights[:, 3] = 1.0
+                
+                # First calculate weights per vertex
+                vertex_bone_ids = np.zeros((num_verts, max_influences), dtype=">u4")
+                vertex_weights = np.zeros((num_verts, max_influences), dtype=np.float32)
+                
+                for v_idx, vertex in enumerate(mesh.vertices):
+                    # Get valid bone influences for this vertex
+                    influences = []
+                    for group in vertex.groups:
+                        if group.weight > 0:
+                            group_name = vertex_groups[group.group].name
+                            if group_name in bone_name_to_index:
+                                influences.append((coord_indices_dict[group_name], group.weight))
+                    
+                    if influences:
+                        # Sort by weight (descending) and limit influences
+                        influences.sort(key=lambda x: x[1], reverse=True)
+                        influences = influences[:max_influences]
+                        
+                        # Normalize weights
+                        total_weight = sum(weight for _, weight in influences)
+                        if total_weight > 0:
+                            for i, (bone_idx, weight) in enumerate(influences):
+                                vertex_bone_ids[v_idx, i] = bone_idx
+                                vertex_weights[v_idx, i] = weight / total_weight
+                        else:
+                            # Edge case: weights sum to 0
+                            vertex_weights[v_idx, max_influences-1] = 1.0
+                    else:
+                        # No valid influences - use default
+                        vertex_weights[v_idx, max_influences-1] = 1.0
+                
+                # Map vertex weights to loops for per-loop data
+                bone_ids = vertex_bone_ids[vertex_indices]
+                weights = vertex_weights[vertex_indices]
 
                 # === Triangle index data ===
                 loop_tri_indices = np.empty((num_tris, 3), dtype=np.uint32)
@@ -1285,6 +1270,9 @@ class XfbinExporter:
         
         if flags & RiggingFlag.OUTLINE and pg.texGroupsCount > 1:
             chunk.texture_groups.append(g2)
+            pg.texGroupsCount = 2
+        else:
+            pg.texGroupsCount = 1
             
 
         return chunk
@@ -1427,7 +1415,7 @@ def make_vertex_dtype(num_uvs):
         dtype.append((f'uv{i}', 'f4', 2))
     dtype += [
         ('color', 'u1', 4),
-        ('bone_ids', 'u1', 4),
+        ('bone_ids', 'u4', 4),
         ('bone_weights', 'f4', 4),
     ]
     return np.dtype(dtype)
