@@ -243,13 +243,6 @@ class BrNudMesh(BrStruct):
         br.write_uint32(buffers.polyClump.size())
         br.write_uint32(buffers.vertClump.size())
         br.write_uint32(buffers.vertAddClump.size() if bone_type else 0)
-
-        # Debug output for header offsets
-        print(f"Writing mesh header offsets:")
-        print(f"  polyClump offset: {buffers.polyClump.size()}")
-        print(f"  vertClump offset: {buffers.vertClump.size()}")
-        print(f"  vertAddClump offset: {buffers.vertAddClump.size() if bone_type else 0}")
-
         br.write_uint16(mesh.vertices.size)
 
         # Write vertex size

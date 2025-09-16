@@ -227,13 +227,13 @@ class NuccChunkClump(NuccChunk):
 
         self.field00 = br_chunk.field00
 
-        self.coord_flag0 = br_chunk.coordFlag0
-        self.coord_flag1 = br_chunk.coordFlag1
+        self.coord_flag0 = len(br_chunk.modelGroups)
+        self.coord_flag1 = len(br_chunk.extraGroups)
 
         self.bounding_box = br_chunk.bounding_box if self.field00 == 2 else [0, 0, 0, 0, 0, 0]
 
-        self.model_flag0 = br_chunk.modelFlag0
-        self.model_flag1 = br_chunk.modelFlag1
+        #self.model_flag0 = br_chunk.modelFlag0
+        #self.model_flag1 = br_chunk.modelFlag1
 
         # Get the coord chunks
         self.coord_chunks: List[NuccChunkCoord] = list()
@@ -257,7 +257,7 @@ class NuccChunkClump(NuccChunk):
                     self.coord_chunks[i].node)
 
         # Get the model chunks
-        self.model_chunks: List[NuccChunkModel] = list()
+        '''self.model_chunks: List[NuccChunkModel] = list()
         for i in br_chunk.modelIndices:
             model: NuccChunkModel = chunk_list[chunk_indices[i]]
             self.model_chunks.append(model)
@@ -266,7 +266,7 @@ class NuccChunkClump(NuccChunk):
             if isinstance(model, NuccChunkModel):
                 # Set the model chunk's respective coord
                 if model.coord_index != -1:
-                    model.coord_chunk = self.coord_chunks[model.coord_index]
+                    model.coord_chunk = self.coord_chunks[model.coord_index]'''
 
         # Initialize the model groups
         self.model_groups: List[ClumpModelGroup] = list()
@@ -274,6 +274,12 @@ class NuccChunkClump(NuccChunk):
             self.model_groups.append(ClumpModelGroup())
             self.model_groups[-1].init_data(model_group,
                                             self.coord_chunks, chunk_list, chunk_indices)
+        
+        self.extra_groups: List[ClumpModelGroup] = list()
+        for extra_group in br_chunk.extraGroups:
+            self.extra_groups.append(ClumpModelGroup())
+            self.extra_groups[-1].init_data(extra_group,
+                                             self.coord_chunks, chunk_list, chunk_indices)
 
     def clear_non_model_chunks(self, model_list: bool = True, model_groups: bool = True, none_refs: bool = False) -> int:
         """Removes all chunks that are not NuccChunkModel from the model list and model groups of this clump, based on the arguments.\n

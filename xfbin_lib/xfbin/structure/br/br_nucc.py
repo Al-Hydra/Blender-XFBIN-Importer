@@ -240,8 +240,8 @@ class BrNuccChunkClump(BrNuccChunk):
         self.field00 = br.read_uint32() # 0 disables post processing effects
 
         self.coordCount = br.read_uint16()
-        self.coordFlag0 = br.read_uint8()
-        self.coordFlag1 = br.read_uint8()
+        self.coordFlag0 = br.read_uint8() #lod groups
+        self.coordFlag1 = br.read_uint8() # extra groups
 
         if self.field00 == 2:
             self.bounding_box = br.read_float32(6)
@@ -250,8 +250,16 @@ class BrNuccChunkClump(BrNuccChunk):
         # Signed because root node's parent index is -1
         self.coordNodeParentsIndices = br.read_int16(self.coordCount)
         self.coordNodeIndices = br.read_uint32(self.coordCount)
+        
+        self.modelGroups = br.read_struct(BrClumpModelGroup, self.coordFlag0)
+        self.extraGroups = br.read_struct(BrClumpModelGroup, self.coordFlag1)
+        
+        if self.version >= 0x73:
+            self.extraValue = br.read_int16()
+        else:
+            self.extraValue = -1
 
-        self.modelCount = br.read_uint16()
+        '''self.modelCount = br.read_uint16()
         self.modelFlag0 = br.read_uint8()
         self.modelFlag1 = br.read_uint8()
 
@@ -267,14 +275,14 @@ class BrNuccChunkClump(BrNuccChunk):
             if modelGroup.modelCount == -1 or br.eof():
                 break
 
-            self.modelGroups.append(modelGroup)
+            self.modelGroups.append(modelGroup)'''
 
     def __br_write__(self, br: 'BinaryReader', chunkIndexDict: IterativeDict):
         br.write_uint32(self.nuccChunk.field00)
 
         br.write_uint16(len(self.nuccChunk.coord_chunks))
-        br.write_uint8(self.nuccChunk.coord_flag0)
-        br.write_uint8(self.nuccChunk.coord_flag1)
+        br.write_uint8(len(self.nuccChunk.model_groups))
+        br.write_uint8(len(self.nuccChunk.extra_groups))
 
         if self.nuccChunk.field00 == 2:
             br.write_float32(self.nuccChunk.bounding_box)
@@ -292,18 +300,12 @@ class BrNuccChunkClump(BrNuccChunk):
                 coord_chunks_dict[coord.node.parent.chunk] if coord.node.parent else -1)
 
         br.write_uint32(coord_chunks)
-
-        br.write_uint16(len(self.nuccChunk.model_chunks))
-        br.write_uint8(self.nuccChunk.model_flag0)
-        br.write_uint8(self.nuccChunk.model_flag0)
-
-        # TODO: is this correct?
-        br.write_uint32(0)
-
-        br.write_uint32(
-            tuple(map(lambda x: chunkIndexDict.get_or_next(x), self.nuccChunk.model_chunks)))
+        
 
         for group in self.nuccChunk.model_groups:
+            br.write_struct(BrClumpModelGroup(), group, chunkIndexDict)
+        
+        for group in self.nuccChunk.extra_groups:
             br.write_struct(BrClumpModelGroup(), group, chunkIndexDict)
 
         br.write_int16(-1)
@@ -581,7 +583,8 @@ class BrModelHit(BrStruct):
 
 
 class BrNuccChunkBillboard(BrNuccChunk):
-    def __br_read__(self, br: 'BinaryReader', version):
+    def init_data(self, br: BinaryReader):
+        super().init_data(br)
         self.model_index = br.read_uint32()
         self.flags = br.read_uint32()
         self.frame_count = br.read_uint16()
@@ -643,7 +646,7 @@ class BrNuccChunkBillboard(BrNuccChunk):
             self.outline_id_frames = [br.read_float32() for _ in range(self.frame_count)]
 
     def __br_write__(self, br: 'BinaryReader', chunkIndexDict: IterativeDict):
-        br.write_uint8(self.nuccChunk.data)
+        br.write_bytes(self.nuccChunk.data)
 
 class BrNuccChunkModelPrimitiveBatch(BrNuccChunk):
     def init_data(self, br: BinaryReader):

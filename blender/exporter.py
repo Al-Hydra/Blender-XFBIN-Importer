@@ -448,20 +448,13 @@ class XfbinExporter:
             # Create the model chunks as a dict to make it easier to preserve order
             model_chunks = {m.name: m for m in self.make_models(meshes, clump, old_clump, context)}
 
-            # Set the model chunks and model groups based on the clump data
-            #clump.model_chunks = [model_chunks[c.value] for c in clump_data.models if c.value in model_chunks]
-            lod_list = ["lod1", "lod2", "LOD1", "LOD2"]
-            if clump.coord_flag0 > 1:
-                clump.model_chunks = [model for model in model_chunks.values() if not any(lod in model.name for lod in lod_list)]
-            else:
-                clump.model_chunks = [model for model in model_chunks.values()]
-
-            # Add a None reference for model groups that might use it
-            # Hopefully no actual models have that name...
-            model_chunks['None'] = None
+            #model_chunks['None'] = None
+            
+            clump.model_chunks = list(model_chunks.values())
 
             # Add the model groups from the clump data
             clump.model_groups = list()
+            clump.extra_groups = list()
             for group in clump_data.model_groups:
                 group: ClumpModelGroupPropertyGroup
                 g = ClumpModelGroup()
@@ -472,9 +465,22 @@ class XfbinExporter:
                 g.model_chunks = [model_chunks[c.value] for c in group.models if c.value in model_chunks]
 
                 clump.model_groups.append(g)
+            
+            for group in clump_data.extra_groups:
+                group: ClumpModelGroupPropertyGroup
+                g = ClumpModelGroup()
+
+                g.flag0 = group.flag0
+                g.flag1 = group.flag1
+                g.unk = group.unk
+                g.model_chunks = [model_chunks[c.value] for c in group.models if c.value in model_chunks]
+
+                clump.extra_groups.append(g)
+            
         elif old_clump:
-            clump.model_chunks = old_clump.model_chunks
+            #clump.model_chunks = old_clump.model_chunks
             clump.model_groups = old_clump.model_groups
+            clump.extra_groups = old_clump.extra_groups
         else:
             self.operator.report({'ERROR_INVALID_INPUT'}, 'Could not export meshes. Please check the exporter options.')
             raise Exception('Failed to export.')

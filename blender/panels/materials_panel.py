@@ -12,18 +12,34 @@ from ...xfbin_lib.xfbin.structure.nut import Pixel_Formats
 from ...xfbin_lib.xfbin.structure import dds
 from ...xfbin_lib.xfbin.structure.br import br_dds
 from .texture_chunks_panel import XfbinTextureChunkPropertyGroup, NutTexturePropertyGroup
- 
+import uuid
+
+
+'''class XFBIN_UL_MatTextures(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row(align=True)
+            row.prop(item, 'name',emboss= False, text='Name')
+            row.prop(item.texture, 'path',emboss= False, text='Path')
+            row.prop_search(item, 'texture_name', bpy.context.scene.xfbin_texture_chunks_data, 'texture_chunks', text='')'''
+
 class XFBIN_UL_MatTextures(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row(align=True)
-            row.prop(item, 'name',emboss= False, text='', icon='IMAGE_DATA')
-            row.prop_search(item, 'name', bpy.context.scene.xfbin_texture_chunks_data, 'texture_chunks', text='')
-
+            row.prop(item, 'name', emboss=False, text='Name')
+            
+            # Show path from the actual texture (always current)
+            if item.texture:
+                row.prop(item.texture, 'path', emboss=False, text='Path')
+            else:
+                row.label(text="No texture")
+            
+            row.prop_search(item, 'texture_name', bpy.context.scene.xfbin_texture_chunks_data, 'texture_chunks', text='')
 
 class XFBIN_MatTexture_OT_Add(bpy.types.Operator):
     bl_idname = 'xfbin_mat.texture_add'
-    bl_label = 'Add Texture'
+    bl_label = 'Add Texture Entry'
 
     def execute(self, context):
         obj = context.object
@@ -35,7 +51,7 @@ class XFBIN_MatTexture_OT_Add(bpy.types.Operator):
 
 class XFBIN_MatTexture_OT_Remove(bpy.types.Operator):
     bl_idname = 'xfbin_mat.texture_remove'
-    bl_label = 'Remove Texture'
+    bl_label = 'Remove Texture Entry'
 
     def execute(self, context):
         obj = context.object
@@ -49,7 +65,7 @@ class XFBIN_MatTexture_OT_Remove(bpy.types.Operator):
 
 class XFBIN_MatTexture_OT_Move(bpy.types.Operator):
     bl_idname = 'xfbin_mat.texture_move'
-    bl_label = 'Move Texture'
+    bl_label = 'Move Texture Entry'
 
     direction: bpy.props.EnumProperty(
         items=(
@@ -80,7 +96,7 @@ class XFBIN_MatTexture_OT_Move(bpy.types.Operator):
 
 class XFBIN_MatTexture_OT_Duplicate(bpy.types.Operator):
     bl_idname = 'xfbin_mat.texture_duplicate'
-    bl_label = 'Copy Texture'
+    bl_label = 'Copy Texture Entry'
 
     def execute(self, context):
         obj = context.object
@@ -90,20 +106,217 @@ class XFBIN_MatTexture_OT_Duplicate(bpy.types.Operator):
         if len(mat.NUTextures) > 0:
             newTexture: XfbinMaterialTexturesPropertyGroup = mat.NUTextures.add()
             newTexture.name = mat.NUTextures[texture_index].name
+            newTexture.texture_name = mat.NUTextures[texture_index].texture_name
+            newTexture.texture_uuid = mat.NUTextures[texture_index].texture_uuid
+        
+        #move selection to new item
+        mat.NUT_index = len(mat.NUTextures) - 1
+        
+        return {'FINISHED'}
+
+
+class XFBIN_MatTexture_OT_New(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.new_texture'
+    bl_label = 'New Texture Chunk'
+    bl_description = 'Create a completely new texture chunk and add it to the material'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        texture_index = mat.NUT_index
+
+        scene_textures: NutTexturePropertyGroup = bpy.context.scene.xfbin_texture_chunks_data
+        
+        if len(mat.NUTextures) > 0:
+            newTexture: XfbinMaterialTexturesPropertyGroup = mat.NUTextures.add()
+            # Create a new texture chunk
+            new_tex_chunk: XfbinTextureChunkPropertyGroup = scene_textures.texture_chunks.add()
+            new_tex_chunk.name = f'new_texture'
+            new_tex_chunk.uuid = str(uuid.uuid4())
+            newTexture.init_data(new_tex_chunk)
 
         return {'FINISHED'}
 
 
+class XFBIN_MatTexture_OT_Delete(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.delete_texture'
+    bl_label = 'Delete Texture Chunk'
+    bl_description = 'Delete the actual texture chunk from the scene and remove it from the material'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        texture_index = mat.NUT_index
+
+        scene_textures: NutTexturePropertyGroup = bpy.context.scene.xfbin_texture_chunks_data
+        
+        if len(mat.NUTextures) > 0:
+            texture: XfbinMaterialTexturesPropertyGroup = mat.NUTextures[texture_index]
+            # Find and remove the actual texture chunk by UUID
+            for i, tex_chunk in enumerate(scene_textures.texture_chunks):
+                if tex_chunk.uuid == texture.texture_uuid:
+                    scene_textures.texture_chunks.remove(i)
+                    break
+            
+            # Remove from material
+            mat.NUTextures.remove(texture_index)
+            mat.NUT_index = max(0, mat.NUT_index - 1)
+
+        return {'FINISHED'}
+
+
+class XFBIN_UL_MatSubTextures(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row(align=True)
+            #row.prop(item, 'name',emboss= False, text='', icon='IMAGE_DATA')
+            #row.label(text=item.name, icon='IMAGE_DATA')
+            row.operator('xfbin_mat_panel.open_image', text='', icon='FILEBROWSER')
+            row.prop_search(item, "image", bpy.data, "images", text="")
+            row.label(text=f"Format: {item.pixel_format} Size: {item.width}x{item.height}")
+
+
+class XFBIN_MatSubTexture_OT_Add(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.subtexture_add'
+    bl_label = 'Add Texture'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        texture_index = mat.NUT_index
+        if texture_index < 0:
+            return {'CANCELLED'}
+        NUTexture: XfbinMaterialTexturesPropertyGroup = mat.NUTextures[texture_index]
+        subtexture = NUTexture.texture.textures.add()
+        return {'FINISHED'}
+
+
+class XFBIN_MatSubTexture_OT_Remove(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.subtexture_remove'
+    bl_label = 'Remove Texture'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        texture_index = mat.NUT_index
+        if texture_index < 0:
+            return {'CANCELLED'}
+        texture: XfbinMaterialTexturesPropertyGroup = mat.NUTextures[texture_index].texture
+        if not texture:
+            return {'CANCELLED'}
+        if len(texture.textures) > 0:
+            texture.textures.remove(texture.texture_index)
+            #move selection to previous item
+            texture.texture_index = max(0, texture.texture_index - 1)
+
+        return {'FINISHED'}
+
+
+class XFBIN_MatSubTexture_OT_Move(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.subtexture_move'
+    bl_label = 'Move Texture'
+
+    direction: bpy.props.EnumProperty(
+        items=(
+            ('UP', 'Up', ''),
+            ('DOWN', 'Down', ''),
+        ),
+        name='Direction',
+    )
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        texture_index = mat.NUT_index
+        if texture_index < 0:
+            return {'CANCELLED'}
+        texture: XfbinMaterialTexturesPropertyGroup = mat.NUTextures[texture_index].texture
+        if not texture:
+            return {'CANCELLED'}
+        subtexture_index = texture.texture_index
+        if subtexture_index < 0:
+            return {'CANCELLED'}
+        # Get the new index based on the direction
+        new_index = subtexture_index - 1 if self.direction == 'UP' else subtexture_index + 1
+        # Ensure the new index is within the valid range
+        new_index = max(0, min(new_index, len(texture.textures) - 1))
+        # Move the item
+        texture.textures.move(subtexture_index, new_index)
+        # Update the UIList to reflect the moved item and update the selection
+        texture.texture_index = new_index
+
+        return {'FINISHED'}
+
+class XFBIN_MatSubTexture_OT_Duplicate(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.subtexture_duplicate'
+    bl_label = 'Copy Texture'
+
+    def execute(self, context):
+        obj = context.object
+        mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
+        texture_index = mat.NUT_index
+        if texture_index < 0:
+            return {'CANCELLED'}
+        texture: XfbinMaterialTexturesPropertyGroup = mat.NUTextures[texture_index].texture
+        if not texture:
+            return {'CANCELLED'}
+        subtexture_index = texture.texture_index
+
+        if len(texture.textures) > 0:
+            newSubTexture: NutTexturePropertyGroup = texture.textures.add()
+            for k, v in texture.textures[subtexture_index].items():
+                newSubTexture[k] = v
+        
+        #move selection to new item
+        texture.texture_index = len(texture.textures) - 1
+
+        return {'FINISHED'}
+
 class XfbinMaterialTexturesPropertyGroup(PropertyGroup):
     def update_name(self, context):
-        self.name = self.texture.name
-
-
-    name: StringProperty(default='new_texture')
+        # When name is changed, update the actual texture
+        texture_obj = self.get_texture()
+        if texture_obj and texture_obj.name != self.name:
+            texture_obj.name = self.name
+            self.texture_name = self.name  # Keep search in sync
+            
+            # Also update the name for all materials that reference this texture chunk
+            for mat in bpy.data.materials:
+                if mat.xfbin_material_data:
+                    for tex_slot in mat.xfbin_material_data.NUTextures:
+                        if tex_slot.texture_uuid == self.texture_uuid:
+                            if tex_slot.texture_name != self.texture_name:
+                                tex_slot.texture_name = self.texture_name
+            
+    def update_texture_search(self, context):
+        # Called when prop_search changes texture_name
+        if self.texture_name:
+            # Find texture by name and store its UUID
+            texture_obj = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(self.texture_name)
+            if texture_obj:
+                if not texture_obj.uuid:  # Generate UUID if doesn't exist
+                    texture_obj.generate_uuid()
+                self.texture_uuid = texture_obj.uuid
+                self.name = texture_obj.name
     
-    texture: bpy.props.PointerProperty(
-        type=XfbinTextureChunkPropertyGroup,
-        update=update_name)
+    
+    def get_texture(self):
+        """Get the actual texture object by UUID"""
+        if self.texture_uuid:
+            textures = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks
+            for tex in textures:
+                if tex.uuid == self.texture_uuid:
+                    return tex
+        return None
+    
+    name: StringProperty(default='new_texture', update=update_name)
+    texture_name: StringProperty(update=update_texture_search)  # For prop_search display
+    texture_uuid: StringProperty(description="UUID of referenced texture")
+
+    #texture: bpy.props.PointerProperty(type=XfbinTextureChunkPropertyGroup)
+    @property
+    def texture(self):
+        return self.get_texture()
 
     magFilter: EnumProperty(default='2', items=(
                             ('1', 'Nearest', ''),
@@ -147,7 +360,7 @@ class XfbinMaterialTexturesPropertyGroup(PropertyGroup):
 
 
     def init_data(self, chunk):
-        self.name = chunk.name
+        self.name = self.texture_name = chunk.name
     
 
     def init_tex_props(self, tex):
@@ -1116,16 +1329,24 @@ class NutTexturePropertyPanel(Panel):
         mat: XfbinMaterialPropertyGroup = obj.active_material.xfbin_material_data
         #group: TextureGroupPropertyGroup = mat.texture_groups[mat.texture_group_index]
 
-        row = layout.row()
+        box = layout.box()
+        
+        #row = box.row()
         #row.prop_search(group, 'test', bpy.context.scene.xfbin_texture_chunks_data, 'texture_chunks', text='Texture Name')
-        row = layout.row()
-        row.template_list(
-            "XFBIN_UL_MatTextures", "", mat, "NUTextures", mat, "NUT_index",
-            rows=4, maxrows=10, type='DEFAULT'
-        )
+        row = box.row()
+        col1 = row.column()
+        col1.label(text='Texture Containers:')
+        col2 = row.column()
+        col2.label(text='Textures in this container:')
+        col3 = row.column()
+        col3.label(text='Texture Preview:')
+        row = col1.row()
+        row.template_list("XFBIN_UL_MatTextures", "", mat, "NUTextures", mat, "NUT_index", rows=6, maxrows=10, type='DEFAULT')
         col = row.column(align=True)
         col.operator("xfbin_mat.texture_add", icon='ADD', text="")
         col.operator("xfbin_mat.texture_remove", icon='REMOVE', text="")
+        col.operator("xfbin_mat.new_texture", icon='FILE_NEW', text="")
+        col.operator("xfbin_mat.delete_texture", icon='TRASH', text="")
         col.operator("xfbin_mat.texture_duplicate", icon='DUPLICATE', text="")
         col.operator("xfbin_mat.texture_move", icon='TRIA_UP', text="").direction = 'UP'
         col.operator("xfbin_mat.texture_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
@@ -1135,8 +1356,24 @@ class NutTexturePropertyPanel(Panel):
         if mat.NUTextures and texture_index >= 0:
             texture_n: XfbinMaterialTexturesPropertyGroup = mat.NUTextures[texture_index]
             texture = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(texture_n.name)
+            subtexture_index = texture.texture_index
+            
+            #list of textures in the nut texture chunk in a new column
+            #col2 = row.column(align=True)
+            row = col2.row()
             if texture:
-                box = layout.box()
+                row.template_list("XFBIN_UL_MatSubTextures", "", texture, "textures", texture, "texture_index", rows=6, maxrows=10, type='DEFAULT')
+                col = row.column(align=True)
+                col.operator("xfbin_mat.subtexture_add", icon='ADD', text="")
+                col.operator("xfbin_mat.subtexture_remove", icon='REMOVE', text="")
+                col.operator("xfbin_mat.subtexture_duplicate", icon='DUPLICATE', text="")
+                col.operator("xfbin_mat.subtexture_move", icon='TRIA_UP', text="").direction = 'UP'
+                col.operator("xfbin_mat.subtexture_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
+                
+            if texture and texture.textures and texture.texture_index >= 0:
+                row = col3.row()
+                row.template_ID_preview(texture.textures[texture.texture_index], 'image', hide_buttons=True)
+                '''box = layout.box()
                 box.prop(texture, 'texture_count', text='Texture Count')
                 for i in range(texture.texture_count):
                     row = box.row() 
@@ -1145,7 +1382,7 @@ class NutTexturePropertyPanel(Panel):
                     row = box.row()
                     row.prop(texture.textures[i], 'width', text='Width', emboss=False)
                     row.prop(texture.textures[i], 'height', text='Height', emboss=False)
-                    row.prop(texture.textures[i], 'pixel_format', text='Format', emboss=False)
+                    row.prop(texture.textures[i], 'pixel_format', text='Format', emboss=False)'''
             
 
             #texture props panel
@@ -1190,7 +1427,11 @@ class XFBIN_MatTexture_Open(bpy.types.Operator):
         if not nut_texture:
             return {'CANCELLED'}
         
-        texture = nut_texture.textures[mat_texture_index]
+        #texture = nut_texture.textures[mat_texture_index]
+        sub_texture_index = nut_texture.texture_index
+        if sub_texture_index < 0:
+            return {'CANCELLED'}
+        texture = nut_texture.textures[sub_texture_index]
 
         #load the image
         
@@ -1299,6 +1540,65 @@ class XfbinMatClipboardPropertyGroup(PropertyGroup):
     def init_copy_texture(self, texture):
         self.texture_clipboard.init_copy(texture)
 
+
+
+'''class XFBIN_UL_SceneMaterials(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        row = layout.row(align=True)
+        if item.material:
+            row.label(text=item.material.name, icon='MATERIAL')
+        else:
+            row.label(text=item.name)
+        row.prop(item, 'material',emboss= True, text='', icon='MATERIAL')
+
+
+class XFBIN_SceneMaterial_OT_Add(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.shader_add'
+    bl_label = 'Add Shader'
+
+    def execute(self, context):
+        xfbin_scene = bpy.context.scene.xfbin_scene
+        
+        new_mat = xfbin_scene.xfbin_materials.add()
+        
+        return {'FINISHED'}
+
+class XFBIN_SceneMaterial_OT_Remove(bpy.types.Operator):
+    bl_idname = 'xfbin_mat.shader_remove'
+    bl_label = 'Remove Shader'
+
+    def execute(self, context):
+        xfbin_scene = bpy.context.scene.xfbin_scene
+        xfbin_scene.xfbin_materials.remove(xfbin_scene.xfbin_material_index)
+        if xfbin_scene.xfbin_material_index > 0:
+            xfbin_scene.xfbin_material_index -= 1
+
+        return {'FINISHED'}
+    
+
+class XfbinSceneMaterialPropertyGroup(PropertyGroup):
+    def update_name(self, context):
+        if self.material:
+            self.name = self.material.name
+        else:
+            self.name = 'Material'
+    name: StringProperty(name='Name', default='Material')
+    
+    material: PointerProperty(
+        type= bpy.types.Material,
+        name='Material',
+        update= update_name
+    )
+    
+    uvOffset0: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
+    uvScale0: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
+    uvOffset1: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
+    uvScale1: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
+    uvOffset2: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
+    uvScale2: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
+    uvOffset3: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
+    uvScale3: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))'''
+    
 
 class XfbinSceneManagerPropertyGroup(PropertyGroup):
     
@@ -1562,7 +1862,15 @@ class XfbinSceneManagerPropertyGroup(PropertyGroup):
         subtype='COLOR',
         size=3
     )
+    '''xfbin_materials : CollectionProperty(
+        type=XfbinSceneMaterialPropertyGroup,
+        name='XFBIN Materials',
+    )
     
+    xfbin_material_index: IntProperty(
+        name='XFBIN Material Index',
+    )'''
+
 
 class XfbinSceneManagerPanel(Panel):
     bl_idname = 'SCENE_PT_XFBIN_scene_manager'
@@ -1583,7 +1891,31 @@ class XfbinSceneManagerPanel(Panel):
 
         box = layout
         row = box.row()
+        '''row.label(text='Scene Materials:')
         
+        row = box.row()
+        # list
+        row.template_list("XFBIN_UL_SceneMaterials", "", xfbin_scene_manager, "xfbin_materials", xfbin_scene_manager, "xfbin_material_index")
+        col = row.column(align=True)
+        col.operator("xfbin_mat.shader_add", icon='ADD', text="")
+        col.operator("xfbin_mat.shader_remove", icon='REMOVE', text="")
+        
+        row = box.row()
+        row.separator()
+        row = box.row()
+        row.label(text='Material UV Offsets (selected material):')
+        row = box.row()
+        if xfbin_scene_manager.xfbin_materials and xfbin_scene_manager.xfbin_material_index >= 0:
+            matprop: XfbinSceneMaterialPropertyGroup = xfbin_scene_manager.xfbin_materials[xfbin_scene_manager.xfbin_material_index]
+            row.prop(matprop, 'uvOffset0', text='UV0 Offset')
+            row.prop(matprop, 'uvScale0', text='UV0 Scale')
+            row = box.row()
+            row.prop(matprop, 'uvOffset1', text='UV1 Offset/Scale')
+            row = box.row()
+            row.prop(matprop, 'uvOffset2', text='UV2 Offset/Scale')
+            row = box.row()
+            row.prop(matprop, 'uvOffset3', text='UV3 Offset/Scale')'''
+
         lightdir_box = box.box()
         row = lightdir_box.row()
         row.label(text='Light Direction:')
@@ -1768,6 +2100,7 @@ material_property_groups = (
     #TextureGroupPropertyGroup,
     XfbinMaterialPropertyGroup,
     XfbinMatClipboardPropertyGroup,
+    #XfbinSceneMaterialPropertyGroup,
     XfbinSceneManagerPropertyGroup
 )
 
@@ -1776,15 +2109,27 @@ material_classes = (
     XFBIN_UL_MatTextures,
     XFBIN_UL_MatShaders,
     XFBIN_UL_MatParams,
+    XFBIN_UL_MatSubTextures,
+    #XFBIN_UL_SceneMaterials,
     XFBIN_Mat_OT_ResetToDefault,
     XFBIN_Mat_OT_SetAsDefault,
     XFBIN_Material_OT_Copy,
     XFBIN_Material_OT_Paste,
+    
+    
     XFBIN_MatTexture_OT_Add,
     XFBIN_MatTexture_OT_Remove,
     XFBIN_MatTexture_OT_Move,
+    XFBIN_MatTexture_OT_New,
+    XFBIN_MatTexture_OT_Delete,
     XFBIN_MatTexture_Open,
     XFBIN_MatTexture_OT_Duplicate,
+    
+    XFBIN_MatSubTexture_OT_Add,
+    XFBIN_MatSubTexture_OT_Remove,
+    XFBIN_MatSubTexture_OT_Move,
+    XFBIN_MatSubTexture_OT_Duplicate,
+    
     XFBIN_MatShader_OT_Add,
     XFBIN_MatShader_OT_Remove,
     XFBIN_MatShader_OT_Move,
@@ -1799,6 +2144,9 @@ material_classes = (
     XFBIN_MatParam_OT_Paste,
     XFBIN_Scene_OT_CreateLight,
     XFBIN_Scene_OT_CreatePointLight,
+    #XFBIN_SceneMaterial_OT_Add,
+    #XFBIN_SceneMaterial_OT_Remove,
+    
     XfbinMaterialPropertyPanel,
     #TextureGroupPropertyPanel,
     NutTexturePropertyPanel,

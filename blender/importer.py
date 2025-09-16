@@ -95,8 +95,6 @@ class XFBIN_OT_IMPORT_MOVE_FILE(Operator):
 class XFBIN_IMPORT_FILES(bpy.types.PropertyGroup):
     name: StringProperty(name="path", subtype='FILE_PATH')
     
-    def __init__(self):
-        self.name = ""
 
 
 class ImportXFBIN(Operator, ImportHelper):
@@ -484,8 +482,7 @@ class XfbinImporter:
             for i, name in enumerate(vertex_group_list)
         }
 
-        all_model_chunks = list(dict.fromkeys(
-            chain(clump.model_chunks, *map(lambda x: x.model_chunks, clump.model_groups))))
+        all_model_chunks = list(dict.fromkeys(list(chain(*[g.model_chunks for g in clump.model_groups]))))
         for nucc_model in all_model_chunks:
 
             if isinstance(nucc_model, NuccChunkModelPrimitiveBatch):

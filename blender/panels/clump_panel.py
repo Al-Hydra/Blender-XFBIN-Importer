@@ -109,6 +109,10 @@ class ClumpPropertyGroup(PropertyGroup):
 
     model_group_index: IntProperty()
 
+    extra_groups: CollectionProperty(
+        type=ClumpModelGroupPropertyGroup,
+    )
+    extra_group_index: IntProperty()
 
     def init_data(self, clump: NuccChunkClump):
         self.name = clump.name
@@ -117,24 +121,32 @@ class ClumpPropertyGroup(PropertyGroup):
         # Set the properties
         self.field00 = clump.field00
 
-        self.coord_flag0 = clump.coord_flag0
-        self.coord_flag1 = clump.coord_flag1
+        #self.coord_flag0 = clump.coord_flag0
+        #self.coord_flag1 = clump.coord_flag1
 
-        self.model_flag0 = clump.model_flag0
-        self.model_flag1 = clump.model_flag1
+        #self.model_flag0 = clump.model_flag0
+        #self.model_flag1 = clump.model_flag1
 
         # Add models
-        self.models.clear()
+        '''self.models.clear()
         for model in clump.model_chunks:
             m: EmptyPropertyGroup = self.models.add()
-            m.value = model.name
+            m.value = model.name'''
 
         # Add model groups
         self.model_groups.clear()
-        for group in clump.model_groups:
+        for i, group in enumerate(clump.model_groups):
             g: ClumpModelGroupPropertyGroup = self.model_groups.add()
             g.init_data(group)
-            g.name = 'Group'
+            g.name = f"LOD Level {i}"
+        
+        # Add extra groups
+        self.extra_groups.clear()
+        for i, group in enumerate(clump.extra_groups):
+            g: ClumpModelGroupPropertyGroup = self.extra_groups.add()
+            g.init_data(group)
+            g.name = f'Blur and Shadow Group {i}'
+        
 
     def update_models(self, obj: Object):
         empties = [c for c in obj.children if c.type == 'EMPTY']
@@ -148,7 +160,7 @@ class ClumpPropertyGroup(PropertyGroup):
 class ClumpModelGroupPropertyPanel(Panel):
     bl_idname = 'OBJECT_PT_xfbin_model_group'
     bl_parent_id = 'OBJECT_PT_xfbin_clump'
-    bl_label = 'Model Groups'
+    bl_label = 'LOD Groups'
 
     bl_space_type = 'PROPERTIES'
     bl_context = 'object'
@@ -183,6 +195,32 @@ class ClumpModelGroupPropertyPanel(Panel):
                 box.prop_search(model, 'object', context.collection, 'all_objects',
                                 text='Model Object', icon='OUTLINER_OB_EMPTY')
 
+        # Extra Groups
+        layout.separator()
+        layout.label(text='Blur and Shadow Groups')
+        draw_xfbin_list(layout, 3, data, f'xfbin_clump_data', 'extra_groups', 'extra_group_index')
+        index = data.extra_group_index
+        if data.extra_groups and index >= 0:
+            group: ClumpModelGroupPropertyGroup = data.extra_groups[index]
+            box = layout.box()
+
+            row = box.row()
+            row.prop(group, 'flag0')
+            row.prop(group, 'flag1')
+
+            box.prop(group, 'unk')
+
+            box.label(text='Models')
+            draw_xfbin_list(box, 4, group, f'xfbin_clump_data.extra_groups[{index}]', 'models', 'model_index')
+            model_index = group.model_index
+
+            if group.models and model_index >= 0:
+                model: ObjectPropertyGroup = group.models[model_index]
+                box = box.box()
+
+                box.prop_search(model, 'object', context.collection, 'all_objects',
+                                text='Model Object', icon='OUTLINER_OB_EMPTY')
+
 
 class ClumpPropertyPanel(Panel):
     """Panel that displays the ClumpPropertyPanel attached to the selected armature object."""
@@ -205,11 +243,8 @@ class ClumpPropertyPanel(Panel):
 
         draw_copy_paste_ops(layout, 'xfbin_clump_data', 'Clump Properties')
 
-        layout.label(text='LOD Flags:')
         box = layout.box()
         row = box.row()
-        row.prop(data, 'coord_flag0')
-        row.prop(data, 'coord_flag1')
         row.prop(data, 'field00')
 
         layout.prop(data, 'path')

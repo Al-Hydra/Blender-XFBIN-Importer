@@ -1,4 +1,5 @@
 from typing import List
+import uuid
 
 import bpy
 from bpy.props import (BoolProperty, CollectionProperty, IntProperty,
@@ -294,6 +295,7 @@ class NutTexturePropertyGroup(PropertyGroup):
 class XfbinTextureChunkPropertyGroup(PropertyGroup):
     def update_texture_name(self, context):
         self.update_name()
+        
     
     def update_count(self, context):
         if self.texture_count > len(self.textures):
@@ -303,7 +305,13 @@ class XfbinTextureChunkPropertyGroup(PropertyGroup):
             for i in range(len(self.textures) - self.texture_count):
                 self.textures.remove(len(self.textures) - 1)
                 self.texture_index = min(0, len(self.textures) - 1)
-
+    
+    def generate_uuid(self):
+        if not self.uuid:
+            self.uuid = str(uuid.uuid4())
+    
+    uuid: StringProperty(description="Unique identifier")
+    
     texture_name: StringProperty(
         name='Name',
         default='new_texture',
