@@ -280,12 +280,6 @@ def _01_F002(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 	#find the shader node
 	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
 
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
-
 	#get material params from the mesh
 	meshmat = mesh.materials[0]
 
@@ -329,12 +323,6 @@ def _01_F003(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 	
 	#find the shader node
 	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
-
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
 
 	#set shadows culling
 	material.use_backface_culling_shadow = True
@@ -386,21 +374,6 @@ def _03_F002(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '3F0
 
 	#find the shader node
 	shader_node = material.node_tree.nodes.get(shader_name)
-
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
-
-	shader_node.inputs['uvOffset1 Offset X'].default_value = mat_data.uvOffset1[0]
-	shader_node.inputs['uvOffset1 Offset Y'].default_value = mat_data.uvOffset1[1]
-	shader_node.inputs['uvOffset1 Scale X'].default_value = mat_data.uvOffset1[2]
-	shader_node.inputs['uvOffset1 Scale Y'].default_value = mat_data.uvOffset1[3]
-
-	#blendrate
-	shader_node.inputs['blendRate Tex1'].default_value = mat_data.blendRate[0]
-	shader_node.inputs['blendRate Tex2'].default_value = mat_data.blendRate[1]
 
 	#get material params from the mesh
 	meshmat = mesh.materials[0]
@@ -461,15 +434,6 @@ def _01_F008(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '1F0
 	
 	#find the shader node
 	shader_node = material.node_tree.nodes.get("XFBIN SHADER")
-
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
-
-	shader_node.inputs['falloff'].default_value = mat_data.fallOff
-	shader_node.inputs["Glare"].default_value = mat_data.glare
 
 	#set shadows culling
 	material.use_backface_culling_shadow = True
@@ -533,19 +497,6 @@ def _03_F008(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '3F0
 	
 	#find the shader node
 	shader_node = material.node_tree.nodes.get(shader_name)
-
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
-
-	shader_node.inputs['uvOffset1 Offset X'].default_value = mat_data.uvOffset1[0]
-	shader_node.inputs['uvOffset1 Offset Y'].default_value = mat_data.uvOffset1[1]
-	shader_node.inputs['uvOffset1 Scale X'].default_value = mat_data.uvOffset1[2]
-	shader_node.inputs['uvOffset1 Scale Y'].default_value = mat_data.uvOffset1[3]
-
-	shader_node.inputs['falloff'].default_value = mat_data.fallOff
 
 	#set shadows culling
 	material.use_backface_culling_shadow = True
