@@ -3,14 +3,14 @@ import uuid
 
 import bpy
 from bpy.props import (BoolProperty, CollectionProperty, IntProperty,
-                       StringProperty)
+                       StringProperty, EnumProperty)
 from bpy.types import Panel, PropertyGroup
 from ...xfbin_lib.xfbin.structure.nucc import NuccChunkTexture
 from ...xfbin_lib.xfbin.structure.nut import Nut, NutTexture, Pixel_Formats
 from ..common.helpers import XFBIN_TEXTURES_OBJ
 from .common import draw_xfbin_list
 from ...xfbin_lib.xfbin.structure import dds
-from ...xfbin_lib.xfbin.structure.br import br_dds
+from ..utils.texture_converter import read_texture_data, read_texture_from_file
 
 
 def ensure_texture_context():
@@ -212,12 +212,25 @@ class NutTexturePropertyGroup(PropertyGroup):
             
             #read pixel format
             if self.image.packed_files:
-                ddsf = dds.read_dds(self.image.packed_file.data)
-                self.pixel_format = get_pixel_format(ddsf)
+                tex_type, tex = read_texture_data(self.image.packed_file.data)
             else:
                 #try to read the file from the path
-                ddsf = dds.read_dds(open(self.image.filepath, 'rb').read())
-                self.pixel_format = get_pixel_format(ddsf)
+                tex_type, tex = read_texture_from_file(self.image.filepath)
+            
+            if tex_type == 'DDS':
+                ddsf: dds.DDS = tex
+                pixel_format = get_pixel_format(ddsf)
+                if pixel_format:
+                    self.pixel_format = pixel_format
+                    self.image_type = 'DDS'
+                    self.target_format = pixel_format
+                else:
+                    self.pixel_format = 'UNSUPPORTED'
+            elif tex_type == 'PNG':
+                self.pixel_format = 'RGBA8'
+                self.image_type = 'PNG'
+                self.target_format = 'R8G8B8A8'
+            
         else:
             self.width = ''
             self.height = ''
@@ -226,6 +239,7 @@ class NutTexturePropertyGroup(PropertyGroup):
 
     name: StringProperty(name="Name")
     image: bpy.props.PointerProperty(type=bpy.types.Image, name="Image", update=update_texture)
+    image_type: StringProperty(name="Image Type")
     index: IntProperty(name="Index")
     width: StringProperty(name="Width")
     height: StringProperty(name="Height")
@@ -234,6 +248,19 @@ class NutTexturePropertyGroup(PropertyGroup):
     cubemap_format: IntProperty(name="Cubemap Format", default=0)
     cubemap_size: IntProperty(name="Cubemap Size", default=0)
     is_cubemap: BoolProperty(name="Is Cubemap", default=False)
+    target_format: EnumProperty(
+        name="Target Format",
+        items=[
+            ('DXT1', 'DXT1', ''),
+            ('DXT3', 'DXT3', ''),
+            ('DXT5', 'DXT5', ''),
+            ('B5G6R5', 'B5G6R5', ''),
+            ('B5G5R5A1', 'B5G5R5A1', ''),
+            ('B4G4R4A4', 'B4G4R4A4', ''),
+            ('R8G8B8A8', 'RGBA8', ''),
+        ],
+        default='R8G8B8A8',
+    )
     
     def update_name(self):
         #update texture count

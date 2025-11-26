@@ -1,0 +1,12 @@
+[package]
+name = "blockCompressor"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.21", features = ["extension-module", "abi3-py310"] }
+rayon = "1.10"
+intel_tex_2 = "0.5"

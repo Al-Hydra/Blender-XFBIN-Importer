@@ -9,8 +9,8 @@ from ...xfbin_lib.xfbin.structure.nucc import (MaterialTextureGroup,
 from .common import (FloatPropertyGroup, draw_copy_paste_ops, draw_xfbin_list,
                      matrix_prop_group)
 from ...xfbin_lib.xfbin.structure.nut import Pixel_Formats
-from ...xfbin_lib.xfbin.structure import dds
-from ...xfbin_lib.xfbin.structure.br import br_dds
+#from ...xfbin_lib.xfbin.structure import dds
+from ..utils.texture_converter import *
 from .texture_chunks_panel import XfbinTextureChunkPropertyGroup, NutTexturePropertyGroup
 import uuid
 
@@ -1372,17 +1372,19 @@ class NutTexturePropertyPanel(Panel):
                 
             if texture and texture.textures and texture.texture_index >= 0:
                 row = col3.row()
-                row.template_ID_preview(texture.textures[texture.texture_index], 'image', hide_buttons=True)
-                '''box = layout.box()
-                box.prop(texture, 'texture_count', text='Texture Count')
-                for i in range(texture.texture_count):
-                    row = box.row() 
-                    row.prop(texture.textures[i], 'image', text=f'Texture {i}')
-                    row.operator('xfbin_mat_panel.open_image', text='Open a DDS image', icon='FILEBROWSER')
-                    row = box.row()
-                    row.prop(texture.textures[i], 'width', text='Width', emboss=False)
-                    row.prop(texture.textures[i], 'height', text='Height', emboss=False)
-                    row.prop(texture.textures[i], 'pixel_format', text='Format', emboss=False)'''
+                subtexture = texture.textures[subtexture_index]
+                row.template_ID_preview(subtexture, 'image', hide_buttons=True)
+            
+                # selected texture info and target pixel format
+                row = box.row()
+                row.label(text=f"Selected Texture Info:")
+                row.label(text=f"Source Type: {subtexture.image_type}")
+                row.label(text=f"Size: {subtexture.width}x{subtexture.height}")
+                row.label(text=f"Source Format: {subtexture.pixel_format}")
+                row.label(text=f"Target Format:")
+                row.prop(subtexture, 'target_format', text='')
+                # disabled property
+                #row.enabled = False
             
 
             #texture props panel
@@ -1406,12 +1408,12 @@ class NutTexturePropertyPanel(Panel):
 
 
 class XFBIN_MatTexture_Open(bpy.types.Operator):
-    """Open an image to include in the NUT"""
+    """Open an image to include in the NUT container"""
     bl_idname = 'xfbin_mat_panel.open_image'
-    bl_label = 'Open Image (*.dds)'
+    bl_label = 'Open Image (*.dds; *.png; *.tga;)'
 
     filepath: bpy.props.StringProperty(subtype='FILE_PATH')
-    filter_glob: StringProperty(default='*.dds', options={'HIDDEN'})
+    filter_glob: StringProperty(default='*.png;*.dds;*.tga', options={'HIDDEN'})
 
     def execute(self, context):
         obj = context.object
@@ -1431,39 +1433,64 @@ class XFBIN_MatTexture_Open(bpy.types.Operator):
         sub_texture_index = nut_texture.texture_index
         if sub_texture_index < 0:
             return {'CANCELLED'}
-        texture = nut_texture.textures[sub_texture_index]
-
-        #load the image
+        subtexture = nut_texture.textures[sub_texture_index]
         
-        with open(self.filepath, 'rb') as ddsf:
-            texdata: dds.DDS = dds.read_dds(ddsf.read())
+        pixel_format = "Unknown"
+        width = 0
+        height = 0
+        mipmaps_count = 0
 
+        texture_type, texture = read_texture_from_file(self.filepath)
+        if texture_type == 'DDS':
+            dds_texture: DDS = texture
             #check if the dds is in a supported format
-            if texdata.header.pixel_format.fourCC in dds.nut_pf_fourcc.keys():
-                texture.pixel_format = str(dds.nut_pf_fourcc[texdata.header.pixel_format.fourCC])
+            if dds_texture.header.pixel_format.fourCC in nut_pf_fourcc.keys():
+                pixel_format = str(nut_pf_fourcc[dds_texture.header.pixel_format.fourCC])
+                subtexture.pixel_format = pixel_format
+                mipmaps_count = dds_texture.header.mipMapCount
             
-            elif texdata.header.pixel_format.bitmasks in dds.nut_pf_bitmasks.keys():
-                texture.pixel_format = str(dds.nut_pf_bitmasks[texdata.header.pixel_format.bitmasks])
+            elif dds_texture.header.pixel_format.bitmasks in nut_pf_bitmasks.keys():
+                pixel_format = str(nut_pf_bitmasks[dds_texture.header.pixel_format.bitmasks])
+                subtexture.pixel_format = pixel_format
+                mipmaps_count = dds_texture.header.mipMapCount
             
             else:
                 self.report({'ERROR'}, 'Unsupported DDS format. DDS file must be in one of the following formats:\n'
                 'DXT1, DXT3, DXT5, B5G6R5, B5G5R5A1, B4G4R4A4, B8G8R8A8')
                 return {'CANCELLED'}
+            width = dds_texture.header.width
+            height = dds_texture.header.height
+        
+        elif texture_type == 'PNG':
+            png_texture: PNG = texture
+            #set the pixel format to RGBA8 for PNGs
+            pixel_format = 'RGBA8'
+            subtexture.pixel_format = pixel_format
+            width = png_texture.IHDR.Width
+            height = png_texture.IHDR.Height
+        
+        elif texture_type == 'TGA':
+            tga_texture: TGA = texture
+            #set the pixel format to RGBA8 for TGAs
+            pixel_format = 'RGBA8'
+            subtexture.pixel_format = pixel_format
+            width = tga_texture.Width
+            height = tga_texture.Height
 
         #load and pack the image
         image = bpy.data.images.load(self.filepath)
         image.alpha_mode = 'STRAIGHT'
         image.name = self.filepath.split('\\')[-1][:-4]
-        image.pack()
+        #image.pack()
         image.source = 'FILE'
         #add custom properties to the image
-        image['nut_pixel_format'] = str(texdata.header.pixel_format)
-        image['nut_mipmaps_count'] = str(texdata.header.mipMapCount)
+        image['nut_pixel_format'] = pixel_format
+        image['nut_mipmaps_count'] = str(mipmaps_count)
 
-        texture.image = image
-        texture.name = image.name
-        texture.width = str(texdata.header.width)
-        texture.height = str(texdata.header.height)
+        subtexture.name = image.name
+        subtexture.image = image
+        subtexture.width = str(width)
+        subtexture.height = str(height)
 
         return {'FINISHED'}
 
@@ -1539,530 +1566,7 @@ class XfbinMatClipboardPropertyGroup(PropertyGroup):
     
     def init_copy_texture(self, texture):
         self.texture_clipboard.init_copy(texture)
-
-
-
-'''class XFBIN_UL_SceneMaterials(bpy.types.UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        row = layout.row(align=True)
-        if item.material:
-            row.label(text=item.material.name, icon='MATERIAL')
-        else:
-            row.label(text=item.name)
-        row.prop(item, 'material',emboss= True, text='', icon='MATERIAL')
-
-
-class XFBIN_SceneMaterial_OT_Add(bpy.types.Operator):
-    bl_idname = 'xfbin_mat.shader_add'
-    bl_label = 'Add Shader'
-
-    def execute(self, context):
-        xfbin_scene = bpy.context.scene.xfbin_scene
-        
-        new_mat = xfbin_scene.xfbin_materials.add()
-        
-        return {'FINISHED'}
-
-class XFBIN_SceneMaterial_OT_Remove(bpy.types.Operator):
-    bl_idname = 'xfbin_mat.shader_remove'
-    bl_label = 'Remove Shader'
-
-    def execute(self, context):
-        xfbin_scene = bpy.context.scene.xfbin_scene
-        xfbin_scene.xfbin_materials.remove(xfbin_scene.xfbin_material_index)
-        if xfbin_scene.xfbin_material_index > 0:
-            xfbin_scene.xfbin_material_index -= 1
-
-        return {'FINISHED'}
     
-
-class XfbinSceneMaterialPropertyGroup(PropertyGroup):
-    def update_name(self, context):
-        if self.material:
-            self.name = self.material.name
-        else:
-            self.name = 'Material'
-    name: StringProperty(name='Name', default='Material')
-    
-    material: PointerProperty(
-        type= bpy.types.Material,
-        name='Material',
-        update= update_name
-    )
-    
-    uvOffset0: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
-    uvScale0: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
-    uvOffset1: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
-    uvScale1: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
-    uvOffset2: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
-    uvScale2: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
-    uvOffset3: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
-    uvScale3: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))'''
-    
-
-class XfbinSceneManagerPropertyGroup(PropertyGroup):
-    
-    def update_light_properties(self, context):
-        light = self.lightdir_object
-        if light and light.type == 'LIGHT':
-            self.lightdir_vec = light.location
-            self.lightdir_color = light.data.color
-            self.lightdir_intensity = light.data.energy
-
-    lightdir_intensity: FloatProperty(
-        name='Light Intensity',
-        default=1.0,
-        subtype='NONE',
-        min=0.0
-    )
-    
-    lightdir_object: PointerProperty(
-        type=bpy.types.Object,
-        name='Light Object'
-    )
-    
-    lightdir_color: FloatVectorProperty(
-        name='Light Color',
-        default=(1.0, 1.0, 1.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-
-    lightpoint_object0: PointerProperty(
-        type=bpy.types.Object,
-        name='Light Object 0'
-    )
-    
-    lightpoint_color0: FloatVectorProperty(
-        name='Light Color 0',
-        default=(1.0, 1.0, 1.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-    
-    lightpoint_intensity0: FloatProperty(
-        name='Light Intensity 0',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_range0: FloatProperty(
-        name='Light Range 0',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_attenuation0: FloatProperty(
-        name='Light Attenuation 0',
-        default=0.0,
-        subtype='NONE',
-    )
-
-    lightpoint_object1: PointerProperty(
-        type=bpy.types.Object,
-        name='Light Object 1'
-    )
-    
-    lightpoint_color1: FloatVectorProperty(
-        name='Light Color 1',
-        default=(1.0, 1.0, 1.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-    
-    lightpoint_intensity1: FloatProperty(
-        name='Light Intensity 1',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_range1: FloatProperty(
-        name='Light Range 1',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_attenuation1: FloatProperty(
-        name='Light Attenuation 1',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_object2: PointerProperty(
-        type=bpy.types.Object,
-        name='Light Object 2'
-    )
-    
-    lightpoint_color2: FloatVectorProperty(
-        name='Light Color 2',
-        default=(1.0, 1.0, 1.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-    
-    lightpoint_intensity2: FloatProperty(
-        name='Light Intensity 2',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_range2: FloatProperty(
-        name='Light Range 2',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_attenuation2: FloatProperty(
-        name='Light Attenuation 2',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_object3: PointerProperty(
-        type=bpy.types.Object,
-        name='Light Object 3'
-    )
-    
-    lightpoint_color3: FloatVectorProperty(
-        name='Light Color 3',
-        default=(1.0, 1.0, 1.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-    
-    lightpoint_intensity3: FloatProperty(
-        name='Light Intensity 3',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_range3: FloatProperty(
-        name='Light Range 3',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    lightpoint_attenuation3: FloatProperty(
-        name='Light Attenuation 3',
-        default=0.0,
-        subtype='NONE',
-    )
-    
-    ambient_color: FloatVectorProperty(
-        name='Ambient Color',
-        default=(0.5, 0.5, 0.5),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-    
-    shade_color: FloatVectorProperty(
-        name='Shade Color',
-        default=(0.5, 0.5, 0.5, 0.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=4
-    )
-    
-    stage_color: FloatVectorProperty(
-        name='Stage Color',
-        default=(1.0, 1.0, 1.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-    
-    use_stage_color: BoolProperty(
-        name='Use Stage Color',
-        default=False
-    )
-    
-    fog_color: FloatVectorProperty(
-        name='Fog Color',
-        default=(0.0, 0.0, 0.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-    
-    fog_start: FloatProperty(
-        name='Fog Start',
-        default=10.0,
-        subtype='NONE',
-    )
-    
-    fog_end: FloatProperty(
-        name='Fog End',
-        default=10000.0,
-        subtype='NONE',
-    )
-    
-    fog_density: FloatProperty(
-        name='Fog Density',
-        default=0.0,
-        min=0.0,
-        max=100.0,
-        subtype='PERCENTAGE'
-    )
-    
-    cpara_x_pos: FloatProperty(
-        name='Color Paraffin X Coordinate',
-        default=50.0,
-        min=0.0,
-        max=100.0,
-        subtype='PERCENTAGE'
-    )
-    cpara_y_pos: FloatProperty(
-        name='Color Paraffin Y Coordinate',
-        default=50.0,
-        min=0.0,
-        max=100.0,
-        subtype='PERCENTAGE'
-    )
-    cpara_attenuation_start: FloatProperty(
-        name='Color Paraffin Attenuation Start',
-        default=10.0,
-        min=0.0
-        
-    )
-    
-    cpara_attenuation_end: FloatProperty(
-        name='Color Paraffin Attenuation End',
-        default=25.0,
-        min=0.0
-    )
-    
-    cpara_color1: FloatVectorProperty(
-        name='Color Paraffin Color 1',
-        default=(1.0, 1.0, 1.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-    cpara_color2: FloatVectorProperty(
-        name='Color Paraffin Color 2',
-        default=(1.0, 1.0, 1.0),
-        min=0.0,
-        max=1.0,
-        subtype='COLOR',
-        size=3
-    )
-    '''xfbin_materials : CollectionProperty(
-        type=XfbinSceneMaterialPropertyGroup,
-        name='XFBIN Materials',
-    )
-    
-    xfbin_material_index: IntProperty(
-        name='XFBIN Material Index',
-    )'''
-
-
-class XfbinSceneManagerPanel(Panel):
-    bl_idname = 'SCENE_PT_XFBIN_scene_manager'
-    bl_label = 'XFBIN Scene Manager'
-    bl_space_type = 'PROPERTIES'
-    bl_context = 'object'
-    bl_region_type = 'WINDOW'
-
-    @classmethod
-    def poll(cls, context):
-        obj = context.object
-        return obj and obj.type == 'EMPTY' and obj.name == 'XFBIN Scene Manager'
-
-    def draw(self, context):
-        layout = self.layout
-        scene = context.scene
-        xfbin_scene_manager: XfbinSceneManagerPropertyGroup = scene.xfbin_scene
-
-        box = layout
-        row = box.row()
-        '''row.label(text='Scene Materials:')
-        
-        row = box.row()
-        # list
-        row.template_list("XFBIN_UL_SceneMaterials", "", xfbin_scene_manager, "xfbin_materials", xfbin_scene_manager, "xfbin_material_index")
-        col = row.column(align=True)
-        col.operator("xfbin_mat.shader_add", icon='ADD', text="")
-        col.operator("xfbin_mat.shader_remove", icon='REMOVE', text="")
-        
-        row = box.row()
-        row.separator()
-        row = box.row()
-        row.label(text='Material UV Offsets (selected material):')
-        row = box.row()
-        if xfbin_scene_manager.xfbin_materials and xfbin_scene_manager.xfbin_material_index >= 0:
-            matprop: XfbinSceneMaterialPropertyGroup = xfbin_scene_manager.xfbin_materials[xfbin_scene_manager.xfbin_material_index]
-            row.prop(matprop, 'uvOffset0', text='UV0 Offset')
-            row.prop(matprop, 'uvScale0', text='UV0 Scale')
-            row = box.row()
-            row.prop(matprop, 'uvOffset1', text='UV1 Offset/Scale')
-            row = box.row()
-            row.prop(matprop, 'uvOffset2', text='UV2 Offset/Scale')
-            row = box.row()
-            row.prop(matprop, 'uvOffset3', text='UV3 Offset/Scale')'''
-
-        lightdir_box = box.box()
-        row = lightdir_box.row()
-        row.label(text='Light Direction:')
-        row = lightdir_box.row()
-        row.prop_search(xfbin_scene_manager, 'lightdir_object', bpy.data, 'objects', text='')
-        row.prop(xfbin_scene_manager, 'lightdir_color', text='')
-        row = lightdir_box.row()
-        row.prop(xfbin_scene_manager, 'lightdir_intensity')
-        row = lightdir_box.row()
-        row.operator('xfbin_scene.create_light', text='Create Light', icon='LIGHT_SUN')
-        
-        ambinet_box = box.box() 
-        row = ambinet_box.row()
-        row.label(text='Ambient Light:')
-        row = ambinet_box.row()
-        row.prop(xfbin_scene_manager, 'ambient_color', text='')
-        row = box.row()
-        
-        fog_box = box.box()
-        row = fog_box.row()
-        row.label(text='Fog:')
-        row = fog_box.row()
-        row.prop(xfbin_scene_manager, 'fog_color', text='')
-        row = fog_box.row()
-        row.prop(xfbin_scene_manager, 'fog_start')
-        row.prop(xfbin_scene_manager, 'fog_end')
-        row = fog_box.row()
-        row.prop(xfbin_scene_manager, 'fog_density')
-        row = box.row()
-        
-        shade_box = box.box()
-        row = shade_box.row()
-        row.label(text='Shade:')
-        row = shade_box.row()
-        row.prop(xfbin_scene_manager, 'shade_color', text='Shade Color')
-        row = shade_box.row()
-        row.prop(xfbin_scene_manager, 'use_stage_color', text='Use Stage Color')
-        row.prop(xfbin_scene_manager, 'stage_color', text='Stage Color')
-        
-        cpara_box = box.box()
-        row = cpara_box.row()
-        row.label(text='Color Paraffin:')
-        row = cpara_box.row()
-        row.prop(xfbin_scene_manager, 'cpara_x_pos', text='X Position')
-        row.prop(xfbin_scene_manager, 'cpara_y_pos', text='Y Position')
-        row = cpara_box.row()
-        row.prop(xfbin_scene_manager, 'cpara_attenuation_start', text='Attenuation Start')
-        row.prop(xfbin_scene_manager, 'cpara_attenuation_end', text='Attenuation End')
-        row = cpara_box.row()
-        row.prop(xfbin_scene_manager, 'cpara_color1', text='Start Color')
-        row.prop(xfbin_scene_manager, 'cpara_color2', text='End Color')
-        
-        lightpoints_box = box.box()
-        lightpoints_box.label(text='Light Points:')
-        row = lightpoints_box.row()
-        row.label(text='Light Point 0')
-        row = lightpoints_box.row()
-        row.prop_search(xfbin_scene_manager, 'lightpoint_object0', bpy.data, 'objects', text='')
-        row.prop(xfbin_scene_manager, 'lightpoint_color0', text='')
-        row = lightpoints_box.row()
-        row.prop(xfbin_scene_manager, 'lightpoint_intensity0', text='Intensity')
-        row.prop(xfbin_scene_manager, 'lightpoint_range0', text='Range')
-        row.prop(xfbin_scene_manager, 'lightpoint_attenuation0', text='Attenuation')
-        row = lightpoints_box.row()
-        row.operator('xfbin_scene.create_point_light', text='Create Light', icon='LIGHT_POINT').light_number = 0
-        
-        row = lightpoints_box.row()
-        row.label(text='Light Point 1')
-        row = lightpoints_box.row()
-        row.prop_search(xfbin_scene_manager, 'lightpoint_object1', bpy.data, 'objects', text='')
-        row.prop(xfbin_scene_manager, 'lightpoint_color1', text='')
-        row = lightpoints_box.row()
-        row.prop(xfbin_scene_manager, 'lightpoint_intensity1', text='Intensity')
-        row.prop(xfbin_scene_manager, 'lightpoint_range1', text='Range')
-        row.prop(xfbin_scene_manager, 'lightpoint_attenuation1', text='Attenuation')
-        row = lightpoints_box.row()
-        row.operator('xfbin_scene.create_point_light', text='Create Light', icon='LIGHT_POINT').light_number = 1
-        
-        
-        row = lightpoints_box.row()
-        row.label(text='Light Point 2')
-        row = lightpoints_box.row()
-        row.prop_search(xfbin_scene_manager, 'lightpoint_object2', bpy.data, 'objects', text='')
-        row.prop(xfbin_scene_manager, 'lightpoint_color2', text='')
-        row = lightpoints_box.row()
-        row.prop(xfbin_scene_manager, 'lightpoint_intensity2', text='Intensity')
-        row.prop(xfbin_scene_manager, 'lightpoint_range2', text='Range')
-        row.prop(xfbin_scene_manager, 'lightpoint_attenuation2', text='Attenuation')
-        row = lightpoints_box.row()
-        row.operator('xfbin_scene.create_point_light', text='Create Light', icon='LIGHT_POINT').light_number = 2
-        
-        row = lightpoints_box.row()
-        row.label(text='Light Point 3')
-        row = lightpoints_box.row()
-        row.prop_search(xfbin_scene_manager, 'lightpoint_object3', bpy.data, 'objects', text='')
-        row.prop(xfbin_scene_manager, 'lightpoint_color3', text='')
-        row = lightpoints_box.row()
-        row.prop(xfbin_scene_manager, 'lightpoint_intensity3', text='Intensity')
-        row.prop(xfbin_scene_manager, 'lightpoint_range3', text='Range')
-        row.prop(xfbin_scene_manager, 'lightpoint_attenuation3', text='Attenuation')
-        row = lightpoints_box.row()
-        row.operator('xfbin_scene.create_point_light', text='Create Light', icon='LIGHT_POINT').light_number = 3
-
-
-class XFBIN_Scene_OT_CreateLight(bpy.types.Operator):
-    bl_idname = 'xfbin_scene.create_light'
-    bl_label = 'Create Light'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        scene = context.scene
-        xfbin_scene_manager: XfbinSceneManagerPropertyGroup = scene.xfbin_scene
-
-        #create Arrow Empty
-        light_object = bpy.data.objects.new(name='Light Direction', object_data=None)
-        light_object.empty_display_type = 'SINGLE_ARROW'
-        light_object.empty_display_size = 2
-        scene.collection.objects.link(light_object)
-        xfbin_scene_manager.lightdir_object = light_object
-
-        return {'FINISHED'}
-    
-
-class XFBIN_Scene_OT_CreatePointLight(bpy.types.Operator):
-    bl_idname = 'xfbin_scene.create_point_light'
-    bl_label = 'Create Light'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    light_number: IntProperty(
-        name='Light Number',
-        description='Light Number',
-        default=0,
-        min=0,
-        max=3
-    )
-
-    def execute(self, context):
-        scene = context.scene
-        xfbin_scene_manager: XfbinSceneManagerPropertyGroup = scene.xfbin_scene
-
-        light_object = bpy.data.objects.new(name=f'Light Point {self.light_number}', object_data=None)
-        light_object.empty_display_type = 'SPHERE'
-        light_object.empty_display_size = 1
-        scene.collection.objects.link(light_object)
-        setattr(xfbin_scene_manager, f'lightpoint_object{self.light_number}', light_object)
-
-        return {'FINISHED'}
 
 
 class XFBIN_Mat_OT_ResetToDefault(bpy.types.Operator):
@@ -2101,7 +1605,6 @@ material_property_groups = (
     XfbinMaterialPropertyGroup,
     XfbinMatClipboardPropertyGroup,
     #XfbinSceneMaterialPropertyGroup,
-    XfbinSceneManagerPropertyGroup
 )
 
 material_classes = (
@@ -2110,7 +1613,6 @@ material_classes = (
     XFBIN_UL_MatShaders,
     XFBIN_UL_MatParams,
     XFBIN_UL_MatSubTextures,
-    #XFBIN_UL_SceneMaterials,
     XFBIN_Mat_OT_ResetToDefault,
     XFBIN_Mat_OT_SetAsDefault,
     XFBIN_Material_OT_Copy,
@@ -2142,15 +1644,10 @@ material_classes = (
     XFBIN_MatParam_OT_Duplicate,
     XFBIN_MatParam_OT_Copy,
     XFBIN_MatParam_OT_Paste,
-    XFBIN_Scene_OT_CreateLight,
-    XFBIN_Scene_OT_CreatePointLight,
-    #XFBIN_SceneMaterial_OT_Add,
-    #XFBIN_SceneMaterial_OT_Remove,
     
     XfbinMaterialPropertyPanel,
     #TextureGroupPropertyPanel,
     NutTexturePropertyPanel,
     NUD_ShaderPropertyPanel,
-    XfbinSceneManagerPanel,
     
 )

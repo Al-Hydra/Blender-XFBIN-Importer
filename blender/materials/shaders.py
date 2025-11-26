@@ -6,7 +6,7 @@ path = os.path.dirname(os.path.realpath(__file__))
 from ..panels.materials_panel import XfbinMaterialPropertyGroup, XfbinMaterialTexturesPropertyGroup, XfbinTextureChunkPropertyGroup
 
 #Materials
-def F00A(self, mesh, xfbin_mat, mesh_flags):
+def F00A(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -17,6 +17,53 @@ def F00A(self, mesh, xfbin_mat, mesh_flags):
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.materials = ['F00A_Material']
 		material = data_to.materials[0]
+
+	# make sure that post processing outputs and nodes exist
+	outlineID_AOV = bpy.context.view_layer.aovs.get("outlineID")
+	if not outlineID_AOV:
+		outlineID_AOV = bpy.context.view_layer.aovs.add()
+		outlineID_AOV.name = "outlineID"
+	
+	outlineHash_AOV = bpy.context.view_layer.aovs.get("outlineHash")
+	if not outlineHash_AOV:
+		outlineHash_AOV = bpy.context.view_layer.aovs.add()
+		outlineHash_AOV.name = "outlineHash"
+	
+	#check if PostOutlines node group exists
+	if not bpy.data.node_groups.get("PostOutlines"):
+		# get it from the blend file
+		material_path = f'{path}/XFBIN_Materials.blend'
+		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
+			data_to.node_groups = ['PostOutlines']
+	
+	#check if PostOutlines node exists in compositor
+	bpy.context.scene.use_nodes = True
+	tree = bpy.context.scene.node_tree
+		
+	postOutline_node = tree.nodes.get("PostOutlines")
+	if not postOutline_node:
+		# add the node, then link it
+		composite_node = tree.nodes.get("Composite")
+		render_layers_node = tree.nodes.get("Render Layers")
+		postOutline_node = tree.nodes.new("CompositorNodeGroup")
+		postOutline_node.node_tree = bpy.data.node_groups.get("PostOutlines")
+		postOutline_node.name = "PostOutlines"
+
+		tree = bpy.context.scene.node_tree
+		tree.links.new(render_layers_node.outputs["Image"], postOutline_node.inputs["Image"])
+		tree.links.new(render_layers_node.outputs["outlineID"], postOutline_node.inputs["Outline ID"])
+		tree.links.new(render_layers_node.outputs["outlineHash"], postOutline_node.inputs["Outline Hash"])
+		tree.links.new(postOutline_node.outputs[0], composite_node.inputs[0])
+  		#check if the viewer node exists
+		viewer_node = tree.nodes.get("Viewer")
+		if viewer_node:
+			#make links only if the view node exists
+			tree.links.new(postOutline_node.outputs[0], viewer_node.inputs[0])
+
+	# ensure post processing is set to always
+	if bpy.context.space_data.type == 'VIEW_3D':
+		bpy.context.space_data.shading.use_compositor = 'ALWAYS'
+
 
 	material = material.copy()
 	material.name = xfbin_mat.name
@@ -55,10 +102,24 @@ def F00A(self, mesh, xfbin_mat, mesh_flags):
 			shader_node.inputs['toneOffsetParam'].default_value = prop.values[0]
 		elif prop.name == "NU_celShadeParam":
 			shader_node.inputs['celShadeParam'].default_value = prop.values[0]
+   
+   #get outline hash node
+	outlineHash_node = material.node_tree.nodes.get('outlineHashColor')
+	
+	# turn the hash into a 4-channel color
+	outline_hash_color = (
+		((outline_hash >> 24) & 0xFF) / 255.0 * 10,
+		((outline_hash >> 16) & 0xFF) / 255.0 * 10,
+		((outline_hash >> 8) & 0xFF) / 255.0 * 10,
+		1
+	)
+ 
+	# we'll use the hash as color
+	outlineHash_node.outputs[0].default_value = outline_hash_color
 	
 	return material
 
-def _02_F00A(self, mesh, xfbin_mat, mesh_flags):
+def _02_F00A(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -70,6 +131,52 @@ def _02_F00A(self, mesh, xfbin_mat, mesh_flags):
 			data_to.materials = ['2F00A_Material']
 		material = data_to.materials[0]
 	
+ 
+	# make sure that post processing outputs and nodes exist
+	outlineID_AOV = bpy.context.view_layer.aovs.get("outlineID")
+	if not outlineID_AOV:
+		outlineID_AOV = bpy.context.view_layer.aovs.add()
+		outlineID_AOV.name = "outlineID"
+	
+	outlineHash_AOV = bpy.context.view_layer.aovs.get("outlineHash")
+	if not outlineHash_AOV:
+		outlineHash_AOV = bpy.context.view_layer.aovs.add()
+		outlineHash_AOV.name = "outlineHash"
+	
+	#check if PostOutlines node group exists
+	if not bpy.data.node_groups.get("PostOutlines"):
+		# get it from the blend file
+		material_path = f'{path}/XFBIN_Materials.blend'
+		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
+			data_to.node_groups = ['PostOutlines']
+	
+	#check if PostOutlines node exists in compositor
+	bpy.context.scene.use_nodes = True
+	tree = bpy.context.scene.node_tree
+		
+	postOutline_node = tree.nodes.get("PostOutlines")
+	if not postOutline_node:
+		# add the node, then link it
+		composite_node = tree.nodes.get("Composite")
+		render_layers_node = tree.nodes.get("Render Layers")
+		postOutline_node = tree.nodes.new("CompositorNodeGroup")
+		postOutline_node.node_tree = bpy.data.node_groups.get("PostOutlines")
+		postOutline_node.name = "PostOutlines"
+
+		tree = bpy.context.scene.node_tree
+		tree.links.new(render_layers_node.outputs["Image"], postOutline_node.inputs["Image"])
+		tree.links.new(render_layers_node.outputs["outlineID"], postOutline_node.inputs["Outline ID"])
+		tree.links.new(render_layers_node.outputs["outlineHash"], postOutline_node.inputs["Outline Hash"])
+		tree.links.new(postOutline_node.outputs[0], composite_node.inputs[0])
+  		#check if the viewer node exists
+		viewer_node = tree.nodes.get("Viewer")
+		if viewer_node:
+			#make links only if the view node exists
+			tree.links.new(postOutline_node.outputs[0], viewer_node.inputs[0])
+
+	# ensure post processing is set to always
+	if bpy.context.space_data.type == 'VIEW_3D':
+		bpy.context.space_data.shading.use_compositor = 'ALWAYS'
  
 	material = material.copy()
 	material.name = xfbin_mat.name
@@ -107,25 +214,8 @@ def _02_F00A(self, mesh, xfbin_mat, mesh_flags):
 		celshade = bpy.data.images.load(f"{path}/celshade.png")
 		celshade.name = 'celshade'
 	
-	#set tex2 and 3 to use celshade
-	tex3_node = material.node_tree.nodes.get('celShade1')
-	tex3_node.image = bpy.data.images.get('celshade')
-	tex4_node = material.node_tree.nodes.get('celShade2')
-	tex4_node.image = bpy.data.images.get('celshade')
-
 	#find the shader node
 	shader_node = material.node_tree.nodes.get('XFBIN SHADER')
-
-	#set uvOffset and uvScale
-	shader_node.inputs['uvOffset0 Offset X'].default_value = mat_data.uvOffset0[0]
-	shader_node.inputs['uvOffset0 Offset Y'].default_value = mat_data.uvOffset0[1]
-	shader_node.inputs['uvOffset0 Scale X'].default_value = mat_data.uvOffset0[2]
-	shader_node.inputs['uvOffset0 Scale Y'].default_value = mat_data.uvOffset0[3]
-
-	shader_node.inputs['uvOffset1 Offset X'].default_value = mat_data.uvOffset1[0]
-	shader_node.inputs['uvOffset1 Offset Y'].default_value = mat_data.uvOffset1[1]
-	shader_node.inputs['uvOffset1 Scale X'].default_value = mat_data.uvOffset1[2]
-	shader_node.inputs['uvOffset1 Scale Y'].default_value = mat_data.uvOffset1[3]
 
 
 	#get material params from the mesh
@@ -138,14 +228,24 @@ def _02_F00A(self, mesh, xfbin_mat, mesh_flags):
 			shader_node.inputs['celShadeParam'].default_value = prop.values[0]
 		elif prop.name == "NU_blendType":
 			shader_node.inputs['blendType'].default_value = prop.values[0]
-	
-	#set blend Rate
-	shader_node.inputs['blendRate1'].default_value = mat_data.blendRate[0]
-	shader_node.inputs['blendRate2'].default_value = mat_data.blendRate[1]
+   
+	#get outline hash node
+	outlineHash_node = material.node_tree.nodes.get('outlineHashColor')
+
+	# turn the hash into a 4-channel color
+	outline_hash_color = (
+		((outline_hash >> 24) & 0xFF) / 255.0 * 10,
+		((outline_hash >> 16) & 0xFF) / 255.0 * 10,
+		((outline_hash >> 8) & 0xFF) / 255.0 * 10,
+		1
+	)
+ 
+	# we'll use the hash as color
+	outlineHash_node.outputs[0].default_value = outline_hash_color
 	
 	return material
 
-def _01_F002(self, mesh, xfbin_mat, mesh_flags):
+def _01_F002(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -194,7 +294,7 @@ def _01_F002(self, mesh, xfbin_mat, mesh_flags):
 	
 	return material
 
-def _01_F003(self, mesh, xfbin_mat, mesh_flags):
+def _01_F003(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -241,7 +341,7 @@ def _01_F003(self, mesh, xfbin_mat, mesh_flags):
 	
 	return material
 
-def _03_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F002'):
+def _03_F002(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '3F002'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -315,7 +415,7 @@ def _03_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F002'):
 	return material
 
 
-def _01_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F008'):
+def _01_F008(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '1F008'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -377,7 +477,7 @@ def _01_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F008'):
 	return material
 
 
-def _03_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F008'):
+def _03_F008(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '3F008'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -454,7 +554,7 @@ def _03_F008(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F008'):
 
 
 
-def _05_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '5F002'):
+def _05_F002(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '5F002'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -501,7 +601,7 @@ def _05_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '5F002'):
 	return material
 
 
-def _05_F00D(self, mesh, xfbin_mat, mesh_flags):
+def _05_F00D(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -550,7 +650,7 @@ def _05_F00D(self, mesh, xfbin_mat, mesh_flags):
 	return material
 
 
-def _07_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F002'):
+def _07_F002(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '7F002'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -634,7 +734,7 @@ def _07_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F002'):
 	return material
 
 
-def _19_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '19F002'):
+def _19_F002(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '19F002'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -718,7 +818,7 @@ def _19_F002(self, mesh, xfbin_mat, mesh_flags, shader_name = '19F002'):
 	return material
 
 
-def _01_F801(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F801'):
+def _01_F801(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '1F801'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -835,7 +935,7 @@ def _01_F801(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F801'):
 	return material
 
 
-def _01_F130(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F130'):
+def _01_F130(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '1F130'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -890,7 +990,7 @@ def _01_F130(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F130'):
 	return material
 
 
-def _20_F000(self, mesh, xfbin_mat, mesh_flags, shader_name = '20F000'):
+def _20_F000(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '20F000'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -1381,7 +1481,7 @@ def _07_F010(self, meshmat,  xfbin_mat, matname, mesh, nodegrp = '07F020'):
 
 	return material
 
-def _03_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F00F'):
+def _03_F00F(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '3F00F'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -1460,7 +1560,7 @@ def _03_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '3F00F'):
 	return material
 
 
-def _01_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F00F'):
+def _01_F00F(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '1F00F'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -1524,7 +1624,7 @@ def _01_F00F(self, mesh, xfbin_mat, mesh_flags, shader_name = '1F00F'):
 	return material
 
 
-def E002(self, mesh, xfbin_mat, mesh_flags):
+def E002(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
 	material = bpy.data.materials.new(f'{xfbin_mat.name}')
@@ -2140,7 +2240,7 @@ def _19_F0_0F(self, meshmat, xfbin_mat, matname, mesh, nodegrp = '19F00F'):
 	return material
 
 
-def _07_F006(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F006'):
+def _07_F006(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '7F006'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -2269,7 +2369,7 @@ def _07_F006(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F006'):
 	return material
 
 
-def _07_F00B(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F00B'):
+def _07_F00B(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '7F00B'):
 	
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
@@ -2335,7 +2435,7 @@ def _07_F00B(self, mesh, xfbin_mat, mesh_flags, shader_name = '7F00B'):
 	return material
 
 
-def default_mat(self, mesh, xfbin_mat, mesh_flags, nodegrp = 'Default'):
+def default_mat(self, mesh, xfbin_mat, mesh_flags, outline_hash, nodegrp = 'Default'):
 	bpy.context.scene.view_settings.view_transform = 'Standard'
 
 	material = bpy.data.materials.new(f'{xfbin_mat.name}')

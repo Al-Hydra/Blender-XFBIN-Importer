@@ -27,13 +27,13 @@ from ..xfbin_lib.xfbin.structure.nucc import (CoordNode, NuccChunkAnm, NuccChunk
 from ..xfbin_lib.xfbin.structure.nud import NudMesh
 from ..xfbin_lib.xfbin.structure.xfbin import Xfbin
 from ..xfbin_lib.xfbin.xfbin_reader import read_xfbin
-from ..xfbin_lib.xfbin.structure import dds
 from .common.coordinate_converter import *
 from .common.helpers import (XFBIN_DYNAMICS_OBJ, XFBIN_ANMS_OBJ, XFBIN_TEXTURES_OBJ,
                              int_to_hex_str)
 from .materials.shaders import (shaders_dict, collision_mat)
 import cProfile
-
+from zlib import crc32
+import numpy as np
 class XFBIN_UL_IMPORT_LIST(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         
@@ -251,6 +251,11 @@ class XfbinImporter:
         self.skip_lod_tex = import_settings.get('skip_lod_tex')
         self.import_modelhit = import_settings.get('import_modelhit')
         
+        # get the file name without extension
+        xfbin_file = os.path.basename(self.filepath).split('.')[0]
+        
+        self.xfbin_hash = crc32(xfbin_file.encode('utf-8'))
+        
         #check if XFBIN Scene Manager exists if not create it
         if not bpy.data.collections.get("XFBIN Scene Manager"):
             bpy.data.collections.new("XFBIN Scene Manager")
@@ -263,7 +268,7 @@ class XfbinImporter:
             scene_manager = bpy.data.objects.new("XFBIN Scene Manager", None)
             scene_manager.empty_display_size = 0
             scene_manager_collection.objects.link(scene_manager)
-        
+
 
     xfbin: Xfbin
     collection: bpy.types.Collection
@@ -499,12 +504,7 @@ class XfbinImporter:
 
             # Create an empty to store the NUD's properties, and set the armature to be its parent
             blender_mesh = bpy.data.meshes.new(nucc_model.name)
-            #blender_mesh.auto_smooth_angle = 180
-            #blender_mesh.use_auto_smooth = True
-            #blender_mesh.create_normals_split()
-
-            #create a bmesh to store all the meshes
-            bm = bmesh.new()
+            
 
             # Set the mesh bone as the object's parent bone, if it exists (it should)
             mesh_bone = None
@@ -512,19 +512,19 @@ class XfbinImporter:
                 mesh_bone: Bone = armature_obj.data.bones.get(
                     nucc_model.coord_chunk.name)
 
-            custom_normals = list()
 
-            deform = bm.verts.layers.deform.new("Vertex Weights")
-            color = bm.loops.layers.color.new("Color")
-            
-            '''
-            This is an unreliable way to get the number of UV layers, since the number of UV layers can vary between meshes
-            uv_count = len(nud.mesh_groups[0].meshes[0].vertices[0].uv)
-            uv_layers = [bm.loops.layers.uv.new(f"UV_{i}") for i in range(uv_count)]
-            '''
+            normal_arrays = []
+            color_arrays = []
+            uv0_arrays = []
+            uv1_arrays = []
+            uv2_arrays = []
+            uv3_arrays = []
+            boneID_arrays = []
+            boneWeight_arrays = []
 
-            uv_layers = {}
-
+            #create a bmesh to store all the submeshes
+            bm = bmesh.new()
+            vCount = 0
             for group in nud.mesh_groups:
                 for mat_index, mesh in enumerate(group.meshes):
                     mat_chunk = nucc_model.material_chunks[mat_index]
@@ -532,74 +532,128 @@ class XfbinImporter:
                     #add the material to the mesh
                     try:
                         blender_mesh.materials.append(self.make_material(mat_chunk, mesh, [nucc_model.rigging_flag, group.bone_flags]))
-                    except:
-                        print(f"Error adding material {mat_chunk.name} to mesh {mesh.name}")
+                    except Exception as e:
+                        print(f"Error adding material {mat_chunk.name} to mesh {mesh.name} \n"
+                              f"Error message: {e}")
                         pass
-                    uv_count = len(mesh.vertices[0].uv)
-
-                    #check if the uv layers already exist
-                    for uv in range(uv_count):
-                        if not uv_layers.get(uv):
-                            uv_layers[uv] = bm.loops.layers.uv.new(f"UV_{uv}")
                     
-
                     vCount = len(bm.verts)
-
-                    # Vertices
-                    for vtx in mesh.vertices:
-                        vert = bm.verts.new(pos_scaled_to_blender(vtx.position))
-
-                        # Tangents cannot be applied
-                        normal = Vector(vtx.normal).normalized()
-                        custom_normals.append(normal)
-                        vert.normal = normal
-
-                        if vtx.bone_weights:
-                            for bone_id, bone_weight in zip(vtx.bone_ids, vtx.bone_weights):
-                                if bone_weight > 0:
-                                    vertex_group_index = vertex_group_indices[clump.coord_chunks[bone_id].name]
-                                    vert[deform][vertex_group_index] = bone_weight
-                        else:
-                            vertex_group_index = vertex_group_indices[nucc_model.coord_chunk.name]
-                            vert[deform][vertex_group_index] = 1
-
-                    # Set up the indexing table inside the bmesh so lookups work
+                    
+                    verts = [bm.verts.new((pos[0] * 0.01, pos[1] * 0.01, pos[2] * 0.01)) for pos in mesh.vertices['position']]
                     bm.verts.ensure_lookup_table()
-                    bm.verts.index_update()
-
-                    # For each triangle, add it to the bmesh
-                    for mesh_face in mesh.faces:
-                        tri_idxs = mesh_face
-
-                        # Skip "degenerate" triangles
-                        if len(set(tri_idxs)) != 3:
-                            continue
-
-                        try:
-                            face = bm.faces.new((bm.verts[tri_idxs[0]+vCount], bm.verts[tri_idxs[1]+vCount], bm.verts[tri_idxs[2]+vCount]))
-                            face.smooth = True
-                            #set face material
-                            face.material_index = mat_index
-
-                            # Set up the UVs and colors for each vertex in the face
-                            for loop in face.loops:
-                                loop[color] = [x / 255 for x in mesh.vertices[loop.vert.index - vCount].color]
-                                for uvi in range(uv_count):
-                                    loop[uv_layers[uvi]].uv = uv_to_blender(mesh.vertices[loop.vert.index - vCount].uv[uvi])
-
-                        except Exception as e:
-                            # We might get duplicate faces for some reason
-                            # print(e)
-                            pass
+                    if 'normal' in mesh.vertices.dtype.names:
+                        normal_arrays.append(mesh.vertices['normal'])
+                    if 'color' in mesh.vertices.dtype.names:
+                        color_arrays.append(mesh.vertices['color'])
+                    if 'uv0' in mesh.vertices.dtype.names:
+                        uv0_arrays.append(mesh.vertices['uv0'])
+                    if 'uv1' in mesh.vertices.dtype.names:
+                        uv1_arrays.append(mesh.vertices['uv1'])
+                    if 'uv2' in mesh.vertices.dtype.names:
+                        uv2_arrays.append(mesh.vertices['uv2'])
+                    if 'uv3' in mesh.vertices.dtype.names:
+                        uv3_arrays.append(mesh.vertices['uv3'])
+                    if 'bone_ids' in mesh.vertices.dtype.names:
+                        boneID_arrays.append(mesh.vertices['bone_ids'])
+                    if 'bone_weights' in mesh.vertices.dtype.names:
+                        boneWeight_arrays.append(mesh.vertices['bone_weights'])
                     
                     
+                    for face in mesh.faces:
+                        face_verts = [bm.verts[vCount + face[i]] for i in range(3)]
+                        f = bm.faces.new(face_verts)
+                        f.material_index = mat_index
+            
             bm.to_mesh(blender_mesh)
             bm.free()
             
-
-            blender_mesh.normals_split_custom_set_from_vertices(custom_normals)
+            #merge all the submesh arrays
+            all_normals = np.concatenate(normal_arrays) if normal_arrays else None
+            all_colors = np.concatenate(color_arrays) if color_arrays else None
+            all_uv0 = np.concatenate(uv0_arrays) if uv0_arrays else None
+            all_uv1 = np.concatenate(uv1_arrays) if uv1_arrays else None
+            all_uv2 = np.concatenate(uv2_arrays) if uv2_arrays else None
+            all_uv3 = np.concatenate(uv3_arrays) if uv3_arrays else None
+            all_boneIDs = np.concatenate(boneID_arrays) if boneID_arrays else None
+            all_boneWeights = np.concatenate(boneWeight_arrays) if boneWeight_arrays else None
+            
+            
+            #print(f"vertex count: {len(blender_mesh.vertices)}, normal count: {len(all_normals) if all_normals is not None else 0}")
+            
+            # set smooth shading
+            blender_mesh.polygons.foreach_set("use_smooth", np.ones(len(blender_mesh.polygons), dtype=np.int8))
+            
+            # apply normals if they exist
+            if all_normals is not None:
+                blender_mesh.normals_split_custom_set_from_vertices(all_normals)
+            
+            loops = blender_mesh.loops
+            loop_count = len(loops)
+            loop_vert_indices = np.empty(loop_count, dtype=np.int32)
+            loops.foreach_get("vertex_index", loop_vert_indices)
+            
+            #apply vertex colors
+            if all_colors is not None:
+                color_layer = blender_mesh.vertex_colors.new(name="Color")
+                color_data = color_layer.data
+                
+                colors = all_colors.astype(np.float32) / 255.0
+                
+                loop_colors = colors[loop_vert_indices]
+                
+                color_data.foreach_set("color", loop_colors.flatten())
+            #apply UVs
+            if all_uv0 is not None:
+                uv0_layer = blender_mesh.uv_layers.new(name="UV_0")
+                uv0_data = uv0_layer.data
+                uv0s = all_uv0.astype(np.float32)
+                uv0s[:,1] = 1.0 - uv0s[:,1]
+                loop_uv0s = uv0s[loop_vert_indices]
+                uv0_data.foreach_set("uv", loop_uv0s.flatten())
+            
+            if all_uv1 is not None:
+                uv1_layer = blender_mesh.uv_layers.new(name="UV_1")
+                uv1_data = uv1_layer.data
+                uv1s = all_uv1.astype(np.float32)
+                uv1s[:,1] = 1.0 - uv1s[:,1]
+                loop_uv1s = uv1s[loop_vert_indices]
+                uv1_data.foreach_set("uv", loop_uv1s.flatten())
+            
+            if all_uv2 is not None:
+                uv2_layer = blender_mesh.uv_layers.new(name="UV_2")
+                uv2_data = uv2_layer.data
+                uv2s = all_uv2.astype(np.float32)
+                uv2s[:,1] = 1.0 - uv2s[:,1]
+                loop_uv2s = uv2s[loop_vert_indices]
+                uv2_data.foreach_set("uv", loop_uv2s.flatten())
+            if all_uv3 is not None:
+                uv3_layer = blender_mesh.uv_layers.new(name="UV_3")
+                uv3_data = uv3_layer.data
+                uv3s = all_uv3.astype(np.float32)
+                uv3s[:,1] = 1.0 - uv3s[:,1]
+                loop_uv3s = uv3s[loop_vert_indices]
+                uv3_data.foreach_set("uv", loop_uv3s.flatten())
+                
+            
             mesh_obj: bpy.types.Object = bpy.data.objects.new(
                 nucc_model.name, blender_mesh)
+            
+            
+            for vg_name in vertex_group_list:
+                mesh_obj.vertex_groups.new(name=vg_name)
+            
+            # add vertex weights
+            if all_boneIDs is not None and all_boneWeights is not None:
+                for i, v in enumerate(blender_mesh.vertices):
+                    for j in range(4): 
+                        bone_id = all_boneIDs[i][j]
+                        weight = all_boneWeights[i][j]
+                        if weight > 0:
+                            group_name = vertex_group_list[bone_id]
+                            group = mesh_obj.vertex_groups.get(group_name)
+                            if group:
+                                group.add([i], weight, 'ADD')
+            
             
             # Set the NUD properties
             mesh_obj.xfbin_nud_data.init_data(
@@ -611,6 +665,10 @@ class XfbinImporter:
             # Set the mesh's parent bone to the mesh bone
             if mesh_bone:
                 mesh_obj.parent_bone = mesh_bone.name
+                # add full weight to the parent bone
+                vg = mesh_obj.vertex_groups.get(mesh_bone.name)
+                if vg and all_boneIDs is None:
+                    vg.add(range(len(blender_mesh.vertices)), 1.0, 'ADD')
             
             # If we're not going to parent it, transform the mesh by the bone's matrix
             if mesh_bone and nucc_model.coord_chunk.node.matrix:                        
@@ -627,13 +685,6 @@ class XfbinImporter:
             #if modelhit_obj:
             #    modelhit_obj.parent = empty
 
-            # Create the vertex groups for all bones (required)
-            for name in [coord.node.name for coord in clump.coord_chunks]:
-                mesh_obj.vertex_groups.new(name=name)
-            
-            '''# Create the vertex groups for bones in the bone range
-            for name in [clump.coord_chunks[i].name for i in range(bone_range[0], bone_range[1]+1)]:
-                mesh_obj.vertex_groups.new(name=name)'''
 
             # Apply the armature modifier
             modifier = mesh_obj.modifiers.new(
@@ -743,17 +794,18 @@ class XfbinImporter:
         # Make a mesh to store the primitive vertex data
         mesh = bpy.data.meshes.new(f'{name}')
 
-        uv = [v.uv for v in vertices]
-        color = [v.color for v in vertices]
+        # Extract UV and color data from structured array
+        has_uv = 'uv0' in vertices.dtype.names
+        has_color = 'color' in vertices.dtype.names
 
         for i in range(0, len(vertices), 3):
             # add verts
-            bmv1 = bm.verts.new(vertices[i].position)
-            bmv1.normal = vertices[i].normal
-            bmv2 = bm.verts.new(vertices[i+1].position)
-            bmv2.normal = vertices[i+1].normal
-            bmv3 = bm.verts.new(vertices[i+2].position)
-            bmv3.normal = vertices[i+2].normal
+            bmv1 = bm.verts.new(vertices[i]['position'])
+            bmv1.normal = vertices[i]['normal']
+            bmv2 = bm.verts.new(vertices[i+1]['position'])
+            bmv2.normal = vertices[i+1]['normal']
+            bmv3 = bm.verts.new(vertices[i+2]['position'])
+            bmv3.normal = vertices[i+2]['normal']
 
             # draw faces
             face = bm.faces.new((bmv1, bmv2, bmv3))
@@ -769,16 +821,18 @@ class XfbinImporter:
         bm.to_mesh(mesh)
 
         #add uv data
-        mesh.uv_layers.new(name='UVMap')
-        uv_layer = mesh.uv_layers.active.data
-        for i, uv in enumerate(uv_layer):
-            uv.uv = vertices[i].uv
+        if has_uv:
+            mesh.uv_layers.new(name='UVMap')
+            uv_layer = mesh.uv_layers.active.data
+            for i, uv in enumerate(uv_layer):
+                uv.uv = vertices[i]['uv0']
         
         #add color data
-        mesh.vertex_colors.new(name='Color')
-        color_layer = mesh.vertex_colors.active.data
-        for i, color in enumerate(color_layer):
-            color.color = vertices[i].color
+        if has_color:
+            mesh.vertex_colors.new(name='Color')
+            color_layer = mesh.vertex_colors.active.data
+            for i, color in enumerate(color_layer):
+                color.color = vertices[i]['color']
 
         # free bmesh
         bm.free()
@@ -822,13 +876,13 @@ class XfbinImporter:
 
             if shader in shaders_dict:
                 try:
-                    material = shaders_dict.get(shader)(self, mesh, xfbin_mat, mesh_flags)
+                    material = shaders_dict.get(shader)(self, mesh, xfbin_mat, mesh_flags, self.xfbin_hash)
                 except Exception as e:
                     self.operator.report(
                         {'WARNING'}, f"There was an error creating the material {material_name} using shader {shader} \n{e}")
-                    material = shaders_dict.get("default")(self, mesh, xfbin_mat, mesh_flags)
+                    material = shaders_dict.get("default")(self, mesh, xfbin_mat, mesh_flags, self.xfbin_hash)
             else:
-                material = shaders_dict.get("default")( self, mesh, xfbin_mat, mesh_flags)
+                material = shaders_dict.get("default")( self, mesh, xfbin_mat, mesh_flags, self.xfbin_hash)
 
             
         else:

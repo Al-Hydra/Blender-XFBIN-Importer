@@ -1,56 +1,3 @@
-"""A general purpose stripifier, based on NvTriStrip (http://developer.nvidia.com/)
-
-Credit for porting NvTriStrip to Python goes to the RuneBlade Foundation
-library:
-http://techgame.net/projects/Runeblade/browser/trunk/RBRapier/RBRapier/Tools/Geometry/Analysis/TriangleStripifier.py?rev=760
-
-The algorithm of this stripifier is an improved version of the RuneBlade
-Foundation / NVidia stripifier; it makes no assumptions about the
-underlying geometry whatsoever and is intended to produce valid
-output in all circumstances.
-"""
-
-# ***** BEGIN LICENSE BLOCK *****
-#
-# Copyright (c) 2007-2012, Python File Format Interface
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-#    * Redistributions of source code must retain the above copyright
-#      notice, this list of conditions and the following disclaimer.
-#
-#    * Redistributions in binary form must reproduce the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer in the documentation and/or other materials provided
-#      with the distribution.
-#
-#    * Neither the name of the Python File Format Interface
-#      project nor the names of its contributors may be used to endorse
-#      or promote products derived from this software without specific
-#      prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-#
-# ***** END LICENSE BLOCK *****
-
-import itertools
-import random # choice
-
-from .trianglemesh import Face, Mesh
 import numpy as np
 
 class TriangleStrip(object):
@@ -58,13 +5,9 @@ class TriangleStrip(object):
 
     def __init__(self, stripped_faces=None, faces=None, vertices=None, reversed_=False):
         self.faces = faces if faces is not None else []
-        self.vertices = np.empty(0, dtype=np.int32) if vertices is None else np.array(vertices, dtype=np.int32)
+        self.vertices = vertices if vertices is None else (np.array(vertices, dtype=np.int32) if not isinstance(vertices, np.ndarray) else vertices)
         self.reversed_ = reversed_
         self.stripped_faces = stripped_faces if stripped_faces is not None else set()
-
-    def __repr__(self):
-        return (f"TriangleStrip(stripped_faces={repr(self.stripped_faces)}, "
-                f"faces={repr(self.faces)}, vertices={self.vertices.tolist()}, reversed_={repr(self.reversed_)})")
 
     def get_unstripped_adjacent_face(self, face, vi):
         for otherface in face.get_adjacent_faces(vi):
@@ -78,6 +21,10 @@ class TriangleStrip(object):
         pv2 = start_face.get_next_vertex(pv1)
         next_face = self.get_unstripped_adjacent_face(start_face, pv0)
 
+        # Use lists for efficient building, convert to numpy at end
+        forward_verts = []
+        backward_verts = []
+
         while next_face:
             self.stripped_faces.add(next_face.index)
             count += 1
@@ -86,33 +33,43 @@ class TriangleStrip(object):
                 if forward:
                     pv0 = pv1
                     pv1 = next_face.get_next_vertex(pv0)
-                    self.vertices = np.append(self.vertices, pv1)
+                    forward_verts.append(pv1)
                     self.faces.append(next_face)
                 else:
                     pv0 = pv2
                     pv2 = next_face.get_next_vertex(pv1)
-                    self.vertices = np.insert(self.vertices, 0, pv2)
+                    backward_verts.append(pv2)
                     self.faces.insert(0, next_face)
                     self.reversed_ = not self.reversed_
             else:
                 if forward:
                     pv0 = pv2
                     pv2 = next_face.get_next_vertex(pv1)
-                    self.vertices = np.append(self.vertices, pv2)
+                    forward_verts.append(pv2)
                     self.faces.append(next_face)
                 else:
                     pv0 = pv1
                     pv1 = next_face.get_next_vertex(pv0)
-                    self.vertices = np.insert(self.vertices, 0, pv1)
+                    backward_verts.append(pv1)
                     self.faces.insert(0, next_face)
                     self.reversed_ = not self.reversed_
 
             next_face = self.get_unstripped_adjacent_face(next_face, pv0)
+        
+        # Efficiently combine arrays
+        if backward_verts or forward_verts:
+            if isinstance(self.vertices, np.ndarray):
+                base_verts = self.vertices.tolist()
+            else:
+                base_verts = list(self.vertices) if self.vertices else []
+            self.vertices = np.array(backward_verts[::-1] + base_verts + forward_verts, dtype=np.int32)
+        elif not isinstance(self.vertices, np.ndarray):
+            self.vertices = np.array(self.vertices, dtype=np.int32)
+        
         return count
 
     def build(self, start_vertex, start_face):
         self.faces.clear()
-        self.vertices = np.empty(0, dtype=np.int32)
         self.reversed_ = False
 
         v0 = start_vertex
@@ -121,7 +78,7 @@ class TriangleStrip(object):
 
         self.stripped_faces.add(start_face.index)
         self.faces.append(start_face)
-        self.vertices = np.array([v0, v1, v2], dtype=np.int32)
+        self.vertices = [v0, v1, v2]  # Start as list for efficient building
 
         self.traverse_faces(v0, start_face, True)
         return self.traverse_faces(v2, start_face, False)
@@ -228,12 +185,21 @@ class TriangleStripifier:
 
     @staticmethod
     def sample(population, k):
-        """Efficient deterministic sampling without list allocation."""
-        n = len(population)
-        if k >= n:
-            return population
-        step = (n - 1) / (k - 1) if k > 1 else 0
-        return [population[int(i * step)] for i in range(k)]
+        """Efficient deterministic sampling supporting both lists and sets."""
+        if isinstance(population, (list, tuple)):
+            n = len(population)
+            if k >= n:
+                return population
+            step = (n - 1) / (k - 1) if k > 1 else 0
+            return [population[int(i * step)] for i in range(k)]
+        else:
+            # For sets, convert only sampled portion
+            pop_list = list(population)
+            n = len(pop_list)
+            if k >= n:
+                return pop_list
+            step = (n - 1) / (k - 1) if k > 1 else 0
+            return [pop_list[int(i * step)] for i in range(k)]
 
     def find_all_strips(self):
         """Efficient triangle strip generation from a mesh."""
@@ -247,8 +213,9 @@ class TriangleStripifier:
         experiments = []
 
         while unstripped_faces:
-            face_list = list(unstripped_faces)
-            face_indices = self.sample(face_list, min(self.num_samples, len(unstripped_faces)))
+            # Sample from sorted face list for deterministic results
+            sorted_faces = sorted(unstripped_faces)
+            face_indices = self.sample(sorted_faces, min(self.num_samples, len(unstripped_faces)))
             experiments.clear()
 
             # Collect candidate experiments
@@ -268,6 +235,10 @@ class TriangleStripifier:
             if best is None:
                 break
 
+            # Debug: print info about best experiment
+            if len(unstripped_faces) > 9000:
+                print(f"Iteration: {len(unstripped_faces)} unstripped faces, {len(experiments)} experiments tested, best score: {selector.best_score:.2f}, best has {len(best.strips)} strips covering {len(best.stripped_faces)} faces")
+
             unstripped_faces.difference_update(best.stripped_faces)
 
             # Apply result
@@ -279,8 +250,3 @@ class TriangleStripifier:
             selector = ExperimentSelector()  # Clear by replacing
 
         return all_strips
-
-
-if __name__=='__main__':
-    import doctest
-    doctest.testmod()

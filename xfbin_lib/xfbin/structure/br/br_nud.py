@@ -175,8 +175,8 @@ class BrNudMesh(BrStruct):
         self.vertAddClumpStart = br.read_uint32() + nud.vertAddClumpStart
 
         self.vertexCount = br.read_uint16()
-        self.vertexSize = br.read_uint8()
-        self.uvSize = br.read_uint8()
+        self.vertexFlags = br.read_uint8()
+        self.uvColorFlags = br.read_uint8()
 
         self.texProps = br.read_uint32(4)
 
@@ -187,43 +187,114 @@ class BrNudMesh(BrStruct):
 
         # Faces
         with br.seek_to(self.polyClumpStart):
-            self.faces = br.read_int16(self.faceCount)
+            self.faces = np.frombuffer(br.read_bytes(self.faceCount * 2), dtype=">u2")
 
         # UV + Vertices
         with br.seek_to(self.vertClumpStart):
-            boneType = self.vertexSize & 0xF0
+            isSkinned = self.vertexFlags & 0xF0
 
-            vertexType = self.vertexSize & 0x0F
+            #vertexType = self.vertexSize & 0x0F
 
             colors = list()
             uvs = list()
-            if boneType > 0:
-                uvCount = self.uvSize >> 4
-                uvType = self.uvSize & 0x0F
-
-                for i in range(self.vertexCount):
-                    if uvType == NudUvType.Null:
-                        colors.append(tuple())
-                    elif uvType == NudUvType.Byte:
-                        colors.append(br.read_uint8(4))
-                    elif uvType == NudUvType.HalfFloat:
-                        colors.append(
-                            list(map(lambda x: int(x * 255), br.read_float16(4))))
-                        
-
-                    uvs.append(list())
-                    for _ in range(uvCount):
-                        uvs[i].append(br.read_float16(2))
-
+            
+            uvCount = self.uvColorFlags >> 4
+            uvColorType = self.uvColorFlags & 0x0F
+            uv_color_dtype_fields = []
+                
+            uvSize = 4 # default 2 half-float uvs
+            colorSize = 0
+            if uvColorType & 1:
+                uvSize = 8 # 2 full-float uvs
+            if uvColorType & 2:
+                colorSize = 4 # 4 byte colors
+                uv_color_dtype_fields.append(('color', '>u1', 4))
+            elif uvColorType & 4:
+                colorSize = 8 # 4 half-float colors
+                uv_color_dtype_fields.append(('color', '>f2', 4))
+            
+            for i in range(uvCount):
+                if uvColorType & 1:
+                    uv_color_dtype_fields.append((f'uv{i}', '>f4', 2))
+                else:
+                    uv_color_dtype_fields.append((f'uv{i}', '>f2', 2))
+            
+            uvPos = None
+            if isSkinned:
+                uvPos = br.pos()
                 br.seek(self.vertAddClumpStart)
 
-            self.vertices = br.read_struct(
-                BrNudVertex, self.vertexCount, vertexType, boneType, self.uvSize)
 
-            if boneType > 0:
-                for i in range(self.vertexCount):
-                    self.vertices[i].color = colors[i]
-                    self.vertices[i].uv = uvs[i]
+            vertex_dtype_fields = []
+            vertexSize = 0
+            # Position field - 3 or 4 components depending on flags
+            if self.vertexFlags & 0x04:
+                vertex_dtype_fields.append(('position', '>f4', 3))
+                vertexSize += 12
+            else:
+                vertex_dtype_fields.append(('position', '>f4', 3))
+                vertex_dtype_fields.append(('position_w', '>f4', (1,)))
+                vertexSize += 16
+            # Normal/tangent/bitangent fields based on flags
+            if self.vertexFlags & 0x04:  # Half-float format
+                if self.vertexFlags & 0x02:  # In half-float: 0x02 = normals 
+                    vertex_dtype_fields.append(('normal', '>f2', 3))
+                    vertex_dtype_fields.append(('normal_w', '>f2', (1,)))
+                    vertexSize += 8
+                    
+                if self.vertexFlags & 0x01:  # In half-float: 0x01 = tangents+bitangents
+                    vertex_dtype_fields.append(('bitangent', '>f2', 4))
+                    vertex_dtype_fields.append(('tangent', '>f2', 4))
+                    vertexSize += 16
+            else:  # Full-float format
+                if self.vertexFlags & 0x01:  # In full-float: 0x01 = normals
+                    vertex_dtype_fields.append(('normal', '>f4', 3))
+                    vertex_dtype_fields.append(('normal_w', '>f4', (1,)))
+                    vertexSize += 16
+                if self.vertexFlags & 0x02:  # In full-float: 0x02 = tangents+bitangents
+                    vertex_dtype_fields.append(('bitangent', '>f4', 4))
+                    vertex_dtype_fields.append(('tangent', '>f4', 4))
+                    vertexSize += 32
+            # Bone data based on bone type
+            if self.vertexFlags & 0x10:  # Float bones
+                vertex_dtype_fields.append(('bone_ids', '>u4', 4))
+                vertex_dtype_fields.append(('bone_weights', '>f4', 4))
+                vertexSize += 32
+            elif self.vertexFlags & 0x20:  # Half-float bones (IMPOSSIBLE IN CC2 NUD)
+                vertex_dtype_fields.append(('bone_ids', '>u2', 4))
+                vertex_dtype_fields.append(('bone_weights', '>f2', 4))
+                vertexSize += 16
+            elif self.vertexFlags & 0x40:  # Byte bones
+                vertex_dtype_fields.append(('bone_ids', '>u1', 4))
+                vertex_dtype_fields.append(('bone_weights', '>u1', 4))
+                vertexSize += 8
+            
+            
+            if uvPos:
+                # read first part of vertex data
+                vertex_dtype = np.dtype(vertex_dtype_fields)
+                vertex_buffer = np.frombuffer(br.read_bytes(vertexSize * self.vertexCount), dtype=vertex_dtype)
+                br.seek(uvPos)
+                # read uv + color data
+                uv_color_dtype = np.dtype(uv_color_dtype_fields)
+                uv_color_buffer = np.frombuffer(br.read_bytes((uvSize + colorSize) * self.vertexCount), dtype=uv_color_dtype)
+                combined_dtype = np.dtype(vertex_dtype_fields + uv_color_dtype_fields)
+                full_vertex_buffer = np.empty(self.vertexCount, dtype=combined_dtype)
+                for name in vertex_dtype.fields.keys():
+                    full_vertex_buffer[name] = vertex_buffer[name]
+                for name in uv_color_dtype.fields.keys():
+                    full_vertex_buffer[name] = uv_color_buffer[name]
+                
+            else:
+                # read full vertex data with uv + color
+                vertex_dtype = np.dtype(vertex_dtype_fields + uv_color_dtype_fields)
+                vertex_buffer = np.frombuffer(br.read_bytes((vertexSize + uvSize + colorSize) * self.vertexCount), dtype=vertex_dtype)
+                full_vertex_buffer = vertex_buffer
+            
+
+            self.vertices = full_vertex_buffer
+            
+
 
         # Materials
         i = 0
@@ -277,10 +348,10 @@ class BrNudMesh(BrStruct):
         # Write faces
         #flatten and split faces with a -1 between them
         flattened_faces =  np.array(
-            [item for strip in mesh.faces for item in strip + [-1]],  # appending -1 after each strip
-            dtype=">i2"
+            [item for strip in mesh.faces for item in strip + [0xFFFF]],  # appending -1 after each strip
+            dtype=">u2"
             )
-        if flattened_faces[-1] == -1:
+        if flattened_faces[-1] == 0xFFFF:
             flattened_faces = flattened_faces[:-1]
         faceAmount = len(flattened_faces)
         facebuffer = flattened_faces.tobytes()
@@ -316,15 +387,16 @@ class BrNudMesh(BrStruct):
         
         
         # Position field - 3 or 4 components depending on flags
-        if vertex_flags == 0x00 or vertex_flags & 0x10:
-            vertex_dtype_fields.append(('position', '>f4', 4))
-        else:
+        if vertex_flags & 0x04:
             vertex_dtype_fields.append(('position', '>f4', 3))
+        else:
+            vertex_dtype_fields.append(('position', '>f4', 4))
         
         # Normal/tangent/bitangent fields based on flags
         if vertex_flags & 0x04:  # Half-float format
             if vertex_flags & 0x02:  # In half-float: 0x02 = normals 
                 vertex_dtype_fields.append(('normals', '>f2', 4))
+                
             if vertex_flags & 0x01:  # In half-float: 0x01 = tangents+bitangents
                 vertex_dtype_fields.append(('bitangents', '>f2', 4))
                 vertex_dtype_fields.append(('tangents', '>f2', 4))
@@ -350,13 +422,18 @@ class BrNudMesh(BrStruct):
         
         if vertex_flags < 0x10:  # Rigid mesh
             #add color and UV fields
-            if uv_type == NudUvType.Byte:
+            if uv_type & 2:
                 vertex_dtype_fields.append(('color', '>u1', 4))
-            elif uv_type == NudUvType.HalfFloat:
+            elif uv_type & 4:
                 vertex_dtype_fields.append(('color', '>f2', 4))
             # UV fields based on uv_type
-            for uv in range(mesh.get_uv_channel_count()):
-                vertex_dtype_fields.append((f'uv{uv}', '>f2', 2))
+            if uv_type & 1:
+                for uv in range(mesh.get_uv_channel_count()):
+                    vertex_dtype_fields.append((f'uv{uv}', '>f4', 2))
+            else:
+                for uv in range(mesh.get_uv_channel_count()):
+                    vertex_dtype_fields.append((f'uv{uv}', '>f2', 2))
+        
         # Create structured array
         vertex_dtype = np.dtype(vertex_dtype_fields)
         vertex_buffer = np.zeros(len(verts), dtype=vertex_dtype)
@@ -414,15 +491,20 @@ class BrNudMesh(BrStruct):
         color_uv_dtype_fields = []
         
         # Add color field based on UV type
-        if uv_type == NudUvType.Byte:
+        if uv_type & 2:
             color_uv_dtype_fields.append(('color', '>u1', 4))
-        elif uv_type == NudUvType.HalfFloat:
+        elif uv_type & 4:
             color_uv_dtype_fields.append(('color', '>f2', 4))
         
         # Add UV fields that exist in the vertex data
+        
         uv_fields = [f'uv{i}' for i in range(4) if f'uv{i}' in verts.dtype.names]
-        for uv_name in uv_fields:
-            color_uv_dtype_fields.append((uv_name, '>f2', 2))
+        if uv_type & 1:
+            for uv_name in uv_fields:
+                color_uv_dtype_fields.append((uv_name, '>f4', 2))
+        else:
+            for uv_name in uv_fields:
+                color_uv_dtype_fields.append((uv_name, '>f2', 2))
         
         # Create and fill structured array for color/UV data
         if uv_type != NudUvType.Null and color_uv_dtype_fields:
@@ -454,12 +536,12 @@ class BrNudMesh(BrStruct):
         vertex_br.write_bytes(vertex_buffer.tobytes())
 
         # Debug buffer sizes after main vertex write
-        print(f"Buffer sizes after main vertex write:")
+        '''print(f"Buffer sizes after main vertex write:")
         print(f"  polyClump: {buffers.polyClump.size()}")
         print(f"  vertClump: {buffers.vertClump.size()}")
         print(f"  vertAddClump: {buffers.vertAddClump.size()}")
         print(f"  Vertex buffer byte size: {len(vertex_buffer.tobytes())}")
-        print(f"  Expected per vertex: {vertex_buffer.itemsize} bytes")
+        print(f"  Expected per vertex: {vertex_buffer.itemsize} bytes")'''
 
         # Alignment
         if bone_type != NudBoneType.NoBones:
@@ -491,6 +573,7 @@ class NudUvType(IntFlag):
 class BrNudVertex(BrStruct):
     def __br_read__(self, br: BinaryReader, vertexType, boneType, uvSize) -> None:
         self.position = br.read_float32(3)
+        #br.read_float32()  # Padding or extra component
         self.normals = None
         self.biTangents = None
         self.tangents = None
@@ -507,6 +590,7 @@ class BrNudVertex(BrStruct):
         # Position already read above, now handle normal/tangent/bitangent based on flags
         if vertex_flags & 0x04:  # Half-float format
             if vertex_flags & 0x02:  # In half-float: 0x02 = normals
+                #br.read_float32()  # Padding
                 self.normals = br.read_float16(3)
                 br.read_float16()  # Padding
             if vertex_flags & 0x01:  # In half-float: 0x01 = tangents+bitangents

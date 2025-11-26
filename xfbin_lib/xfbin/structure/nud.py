@@ -71,12 +71,12 @@ class NudMesh:
 
     def init_data(self, br_mesh: BrNudMesh):
         self.add_vertices(br_mesh.vertices)
-        self.add_faces(br_mesh.faces, br_mesh.faceSize)
+        self.add_faces(br_mesh.faces)
         self.add_materials(br_mesh.materials)
 
-        self.vertex_type = NudVertexType(br_mesh.vertexSize & 0x0F)
-        self.bone_type = NudBoneType(br_mesh.vertexSize & 0xF0)
-        self.uv_type = NudUvType(br_mesh.uvSize & 0x0F)
+        self.vertex_type = NudVertexType(br_mesh.vertexFlags & 0x0F)
+        self.bone_type = NudBoneType(br_mesh.vertexFlags & 0xF0)
+        self.uv_type = NudUvType(br_mesh.uvColorFlags & 0x0F)
         self.face_flag = br_mesh.faceFlag
 
     def has_bones(self):
@@ -95,48 +95,55 @@ class NudMesh:
                     count += 1
         return count
 
-    def add_vertices(self, vertices: List[BrNudVertex]):
-        self.vertices = list()
-        for br_vertex in vertices:
-            vertex = NudVertex()
-            vertex.init_data(br_vertex)
-            self.vertices.append(vertex)
+    def add_vertices(self, vertices):
+        self.vertices = vertices
 
-    def add_faces(self, faces: List[int], faceSize: int):
-        faces = iter(faces)
-
-        if faceSize & 0x40:
-            # 0x40 format does not have -1 indices nor changing directions
-            self.faces = zip(faces, faces, faces)
-            return
-
-        self.faces = list()
-
-        start_dir = 1
-        f1 = next(faces)
-        f2 = next(faces)
-        face_dir = start_dir
-
-        try:
-            while True:
-                f3 = next(faces)
-
-                if f3 == -1:
-                    f1 = next(faces)
-                    f2 = next(faces)
-                    face_dir = start_dir
-                else:
-                    face_dir = -face_dir
-
-                    if f1 != f2 != f3:
-                        if face_dir > 0:
-                            self.faces.append((f3, f2, f1))
-                        else:
-                            self.faces.append((f2, f3, f1))
-                    f1 = f2
-                    f2 = f3
-        except StopIteration:
-            pass
+    def add_faces(self, faces: List[int]):
+        # Convert triangle strips to triangles using vectorized NumPy operations
+        faces_arr = np.array(faces, dtype=np.int32)
+        
+        # Find delimiter positions (-1 markers)
+        delim_pos = np.where(faces_arr == 0xFFFF)[0]
+        
+        if len(delim_pos) == 0:
+            # No delimiters - single strip
+            strips = [faces_arr]
+        else:
+            # Split into strips at delimiters
+            strips = np.split(faces_arr, delim_pos + 1)
+        
+        triangle_list = []
+        for strip in strips:
+            # Remove 0xFFFF values
+            strip = strip[strip != 0xFFFF]
+            strip_len = len(strip)
+            
+            if strip_len < 3:
+                continue
+            
+            # Vectorized triangle generation
+            num_tris = strip_len - 2
+            
+            # Create index arrays for all triangles at once
+            i = np.arange(num_tris)
+            idx0 = strip[i]
+            idx1 = strip[i + 1]
+            idx2 = strip[i + 2]
+            
+            # Determine winding order based on position in strip (even/odd)
+            even_mask = (i % 2 == 0)
+            
+            tris = np.empty((num_tris, 3), dtype=np.int32)
+            tris[even_mask] = np.column_stack((idx0[even_mask], idx1[even_mask], idx2[even_mask]))
+            tris[~even_mask] = np.column_stack((idx0[~even_mask], idx2[~even_mask], idx1[~even_mask]))
+            
+            # Filter out degenerate triangles (where all 3 indices are not unique)
+            unique_mask = ~((tris[:, 0] == tris[:, 1]) | (tris[:, 1] == tris[:, 2]) | (tris[:, 0] == tris[:, 2]))
+            valid_tris = tris[unique_mask]
+            
+            triangle_list.extend(map(tuple, valid_tris))
+        
+        self.faces = triangle_list
 
     def add_materials(self, materials: List[BrNudMaterial]):
         self.materials = list()

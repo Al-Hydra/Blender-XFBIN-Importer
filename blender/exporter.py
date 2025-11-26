@@ -31,7 +31,7 @@ from ..xfbin_lib.xfbin.structure.nud import (Nud, NudMaterial,
                                              NudMaterialTexture, NudMesh,
                                              NudMeshGroup, NudVertex)
 from ..xfbin_lib.xfbin.structure.nut import Nut, NutTexture
-from ..xfbin_lib.xfbin.structure.texture_converter import convert_texture
+from .utils.texture_converter import convert_texture
 from ..xfbin_lib.xfbin.structure.xfbin import Xfbin
 from ..xfbin_lib.xfbin.util.binary_reader.binary_reader.binary_reader import (
     BinaryReader, Endian)
@@ -56,10 +56,11 @@ from .panels.texture_chunks_panel import (NutTexturePropertyGroup,
                                           TextureChunksListPropertyGroup,
                                           XfbinTextureChunkPropertyGroup)
 from .panels.materials_panel import (NUD_ShaderPropertyGroup, NUD_ShaderParamPropertyGroup, NUD_ShaderTexPropertyGroup)
-from .tristrip import tristrip
+from .utils.tristrip import tristrip
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 import numpy as np
+#from .tristrip import rust_loader
+
 class ExportXfbin(Operator, ExportHelper):
     """Export current collection as XFBIN file"""
     bl_idname = 'export_scene.xfbin'
@@ -165,24 +166,50 @@ class ExportXfbin(Operator, ExportHelper):
         default=True,
     )
     
-    optimize_meshes: BoolProperty(
-        name='Optimize meshes',
+    export_tristrips: BoolProperty(
+        name='Export Triangle Strips',
         description='If True, will convert triangles to triangle strips\n'
         'If False, will export the triangles as they are.',
-        default=True,
+        default=True
     )
     
-    aggressive_optimize: BoolProperty(
-        name='Aggressive optimization',
-        description='If True, will try to optimize the meshes as much as possible.\n'
-        'If False, will only convert triangles to triangle strips.',
+    stitch_tristrips: BoolProperty(
+        name='Stitch Triangle Strips',
+        description='If True, will stitch all triangle strips into a single strip per mesh.\n'
+        'Which could help prevent crashes in some cases.',
         default=False,
+    )
+    
+    export_tangents: BoolProperty(
+        name='Export Tangents and Binormals',
+        description='If True, will export tangents and binormals for the meshes.\n'
+        'If False, will not export tangents.',
+        default=True,
     )
     
     normals_as_tangents: BoolProperty(
         name='Export Real Normals as Tangents',
         description='If True, will use the normals as tangents for the meshes.\n'
-        'If False, will use the tangents from the mesh data.',
+        'This only exists for shaders that require it.',
+        default=False,
+    )
+    
+    normals_as_binormals: BoolProperty(
+        name='Export Real Normals as Binormals',
+        description='If True, will use the normals as binormals for the meshes.\n'
+        'This only exists for shaders that require it.',
+        default=False,
+    )
+    
+    high_quality_colors: BoolProperty(
+        name='Export 16-bit Colors',
+        description='If True, will export 16 bit colors instead of 8 bit.',
+        default=False,
+    )
+    
+    high_precision_uvs: BoolProperty(
+        name='Export High Precision UVs',
+        description='If True, will export UVs as 32-bit floats instead of 16-bit half-floats.',
         default=False,
     )
     
@@ -196,11 +223,20 @@ class ExportXfbin(Operator, ExportHelper):
             inject_row = layout.row()
             inject_row.prop(self, 'inject_to_xfbin')
             
-            layout.prop(self, "optimize_meshes")
-            if self.optimize_meshes:
-                layout.prop(self, "aggressive_optimize")
+            # Always enabled, grayed out
+            tristrip_row = layout.row()
+            tristrip_row.enabled = False
+            tristrip_row.prop(self, "export_tristrips")
             
-            layout.prop(self, 'normals_as_tangents')
+            layout.prop(self, "stitch_tristrips")
+            
+            layout.prop(self, 'export_tangents')
+            
+            if self.export_tangents:
+                layout.prop(self, 'normals_as_tangents')
+            
+            layout.prop(self, 'high_precision_uvs')
+            layout.prop(self, 'high_quality_colors')
             
             layout.prop(self, 'export_textures')
             layout.prop(self, 'export_clumps')
@@ -291,8 +327,8 @@ class XfbinExporter:
         self.collection: bpy.types.Collection = bpy.data.collections[export_settings.get('collection')]
 
         self.inject_to_xfbin = export_settings.get('inject_to_xfbin')
-        self.optimize_meshes = export_settings.get('optimize_meshes')
-        self.aggressive_optimize = export_settings.get('aggressive_optimize')
+        self.export_tristrips = export_settings.get('export_tristrips')
+        self.stitch_tristrips = export_settings.get('stitch_tristrips')
         self.export_clumps = export_settings.get('export_clumps')
         self.export_meshes = export_settings.get('export_meshes')
         self.export_bones = export_settings.get('export_bones')
@@ -302,8 +338,10 @@ class XfbinExporter:
         self.export_specific_meshes = export_settings.get('export_specific_meshes')
         self.meshes_to_export = export_settings.get('meshes_to_export')
         self.export_dynamics = export_settings.get('export_dynamics')
+        self.export_tangents = export_settings.get('export_tangents')
         self.normals_as_tangents = export_settings.get('normals_as_tangents')
-
+        self.high_quality_colors = export_settings.get('high_quality_colors')
+        self.high_precision_uvs = export_settings.get('high_precision_uvs')
 
     xfbin: Xfbin
 
@@ -318,24 +356,6 @@ class XfbinExporter:
             #self.export_meshes = self.export_bones = self.export_textures = True
             self.inject_to_clump = False
 
-
-        # Export textures
-        '''if self.export_textures:
-            obj_name = f'{XFBIN_TEXTURES_OBJ} [{self.collection.name}]'
-            texture_chunks_obj = self.collection.objects.get(obj_name)
-
-            if not texture_chunks_obj:
-                self.operator.report(
-                    {'WARNING'}, f'Could not export textures. Make sure that the "{obj_name}" object is inside the collection.')
-            else:
-                texture_chunks_data: TextureChunksListPropertyGroup = texture_chunks_obj.xfbin_texture_chunks_data
-                
-                for i in range(len(texture_chunks_data.texture_chunks)):
-                    tex_chunk: NuccChunkTexture = self.make_texture(texture_chunks_data.texture_chunks[i])
-                    if tex_chunk.nut.texture_count > 0:
-                        self.xfbin.add_chunk_page(tex_chunk)'''
-
-                
         # Export clumps
         if self.export_clumps:
             for armature_obj in [obj for obj in self.collection.objects if obj.type == 'ARMATURE']:
@@ -607,6 +627,7 @@ class XfbinExporter:
         bpy.ops.object.mode_set(mode='OBJECT')
 
         model_chunks = list()
+        texture_chunks_dict = {}
 
         coord_indices_dict = {
             name: i
@@ -721,153 +742,96 @@ class XfbinExporter:
             elif mesh_bone:
                 mesh.transform(mesh_bone.matrix_local.inverted())
 
-            def extract_loop_data_numpy(mesh_obj, mesh, bone_name_to_index, max_influences=4):
-                mesh.calc_loop_triangles()
-                
-
-                num_loops = len(mesh.loops)
-                num_verts = len(mesh.vertices)
-                num_tris  = len(mesh.loop_triangles)
-
-                # === Allocate NumPy arrays ===
-                vertex_indices = np.empty(num_loops, dtype=np.int32)
-                loop_normals   = np.empty((num_loops, 3), dtype=np.float32)
-                positions      = np.empty((num_loops, 3), dtype=np.float32)
-                tangents       = np.empty((num_loops, 3), dtype=np.float32)
-                colors         = np.zeros((num_loops, 4), dtype=np.float32)
-                uvs            = [np.zeros((num_loops, 2), dtype=np.float32) for _ in range(len(mesh.uv_layers))]
-
-                mesh.loops.foreach_get("vertex_index", vertex_indices)
-                mesh.loops.foreach_get("normal", loop_normals.ravel())
-
-                for uv_index, uv_layer in enumerate(mesh.uv_layers):
-                    uv_layer.data.foreach_get("uv", uvs[uv_index].ravel())
-                    uvs[uv_index][:, 1] = 1 - uvs[uv_index][:, 1]  # Flip Y
-
-                if mesh.color_attributes:
-                    # requires Blender 4.x 'color_srgb'
-                    mesh.color_attributes[0].data.foreach_get("color_srgb", colors.ravel())
-                    colors = (colors[:, :4] * 255).astype(np.uint8)
-
-                # === Vertex positions (transformed) ===
-                vert_positions = np.empty((num_verts, 3), dtype=np.float32)
-                mesh.vertices.foreach_get("co", vert_positions.ravel())
-                positions[:] = vert_positions[vertex_indices] * 100.0  # Scale to cm
-
-                # === Tangents or "normals as tangents" ===
-                if getattr(self, "normals_as_tangents", False):
-                    mesh2 = mesh.copy()
-                    if mesh2.attributes.get("custom_normal"):
-                        mesh2.attributes.remove(mesh2.attributes["custom_normal"])
-                    vert_normals = np.empty((num_verts, 3), dtype=np.float32)
-                    mesh2.vertices.foreach_get("normal", vert_normals.ravel())
-                    tangents[:] = vert_normals[vertex_indices]
-                    bpy.data.meshes.remove(mesh2)
-                else:
-                    #triangulate the mesh before calculating tangents
-                    mesh2 = mesh.copy()
-                    bm = bmesh.new()
-                    bm.from_mesh(mesh2)
-                    bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
-                    bm.to_mesh(mesh2)
-                    bm.free()
-                    mesh2.calc_tangents()
-                    mesh2.loops.foreach_get("tangent", tangents.ravel())
-
-                # === Process bone weights efficiently ===
-                vertex_groups = mesh_obj.vertex_groups
-                
-                # First calculate weights per vertex
-                vertex_bone_ids = np.zeros((num_verts, max_influences), dtype=">u4")
-                vertex_weights = np.zeros((num_verts, max_influences), dtype=np.float32)
-                
-                for v_idx, vertex in enumerate(mesh.vertices):
-                    # Get valid bone influences for this vertex
-                    influences = []
-                    for group in vertex.groups:
-                        if group.weight > 0:
-                            group_name = vertex_groups[group.group].name
-                            if group_name in bone_name_to_index:
-                                influences.append((coord_indices_dict[group_name], group.weight))
-                    
-                    if influences:
-                        # Sort by weight (descending) and limit influences
-                        influences.sort(key=lambda x: x[1], reverse=True)
-                        influences = influences[:max_influences]
-                        
-                        # Normalize weights
-                        total_weight = sum(weight for _, weight in influences)
-                        if total_weight > 0:
-                            for i, (bone_idx, weight) in enumerate(influences):
-                                vertex_bone_ids[v_idx, i] = bone_idx
-                                vertex_weights[v_idx, i] = weight / total_weight
-                        else:
-                            # Edge case: weights sum to 0
-                            vertex_weights[v_idx, max_influences-1] = 1.0
-                    else:
-                        # No valid influences - use default
-                        vertex_weights[v_idx, max_influences-1] = 1.0
-                
-                # Map vertex weights to loops for per-loop data
-                bone_ids = vertex_bone_ids[vertex_indices]
-                weights = vertex_weights[vertex_indices]
-
-                # === Triangle index data ===
-                loop_tri_indices = np.empty((num_tris, 3), dtype=np.uint32)
-                material_indices = np.empty(num_tris, dtype=np.uint8)
-                mesh.loop_triangles.foreach_get("loops", loop_tri_indices.ravel())
-                mesh.loop_triangles.foreach_get("material_index", material_indices)
-
-                return {
-                    "positions": positions,
-                    "normals": loop_normals,
-                    "tangents": tangents,
-                    "uvs": uvs,
-                    "colors": colors,
-                    "bone_ids": bone_ids,
-                    "weights": weights,
-                    "loop_tri_indices": loop_tri_indices,
-                    "material_indices": material_indices,
-                    "vertex_indices": vertex_indices
-                }
             
             use_skinning = RiggingFlag.SKINNED in chunk.rigging_flag
-            loop_data = extract_loop_data_numpy(obj, mesh, coord_indices_dict)
-            # Sort the material indices once
-            sorted_idx = np.argsort(loop_data['material_indices'])
-            sorted_materials = loop_data['material_indices'][sorted_idx]
-            sorted_triangles = loop_data['loop_tri_indices'][sorted_idx]
-
+            loop_data = extract_loop_data_numpy(obj, mesh, coord_indices_dict, max_influences=4, normals_as_tangents=self.normals_as_tangents)
+            
+            # Build structured vertex array from loop data
+            positions = loop_data['positions']
+            normals = loop_data['normals']
+            tangents = loop_data['tangents']
+            bitangents = np.cross(normals, tangents)
+            uvs = loop_data['uvs']
+            colors = loop_data['colors']
+            bone_ids = loop_data['bone_ids']
+            weights = loop_data['weights']
+            loop_tri_indices = loop_data['loop_tri_indices']
+            material_indices = loop_data['material_indices']
+            
+            # Create structured array for all loops
+            num_uvs = len(uvs)
+            dtype = make_vertex_dtype(num_uvs)
+            num_loops = len(positions)
+            structured = np.empty(num_loops, dtype=dtype)
+            
+            structured['position'] = positions
+            structured['normal'] = normals
+            structured['tangent'] = tangents
+            structured['bitangent'] = bitangents
+            
+            for i, uv in enumerate(uvs):
+                structured[f'uv{i}'] = uv
+            
+            if colors is not None:
+                structured['color'] = colors
+            else:
+                self.high_quality_colors = False # no need to export high quality colors if there are no colors
+                structured['color'][:] = 255 
+            
+            if use_skinning:
+                structured['bone_ids'] = bone_ids
+                structured['bone_weights'] = weights
+            else:
+                structured['bone_ids'][:] = (0, 0, 0, 0)
+                structured['bone_weights'][:] = (0, 0, 0, 1)
+            
+            # Deduplicate vertices globally
+            unique_verts, unique_tri_indices, _ = dedupe_vertices_structured(
+                structured, loop_tri_indices, material_indices
+            )
+            
+            # Now segment by material
+            sorted_idx = np.argsort(material_indices)
+            sorted_materials = material_indices[sorted_idx]
+            sorted_triangles = unique_tri_indices[sorted_idx]
+            
             # Find boundaries where material changes
             mat_change = np.where(np.diff(sorted_materials) != 0)[0] + 1
-
-            # Split triangles using those boundaries
+            
+            # Split triangles by material
             triangle_groups = np.split(sorted_triangles, mat_change)
+            material_groups = np.split(sorted_materials, mat_change)
             
-            # remove material indeces, vertex indices and loop tri indices
-            for key in ['material_indices', 'vertex_indices', 'loop_tri_indices']:
-                loop_data.pop(key, None)
-            
-            #create a dict to hold the meshes for each material
-            mat_meshes = defaultdict(list)
-            # Iterate through each triangle group and create NudMesh objects
-            for mat_index, triangles in enumerate(triangle_groups):
+            # Create NudMesh for each material
+            for tri_group, mat_group in zip(triangle_groups, material_groups):
+                mat_index = mat_group[0]  # All triangles in group have same material
                 mat_name = mesh.materials[mat_index].name
-                mat_meshes[mat_name] = triangles
-
-            # ----------------------------------
-            # Parallel processing starts here
-            # ----------------------------------
-            job_data = [
-                (mat_name, triangle_indices, loop_data, use_skinning, self.optimize_meshes, self.aggressive_optimize)
-                for mat_name, triangle_indices in mat_meshes.items()
-            ]
-
-            
-            with ThreadPoolExecutor() as executor:
-                results = list(executor.map(build_nud_mesh_parallel, job_data))
-
-            for mat_name, mat_mesh in results:
+                
+                # Get unique vertex indices used by this material
+                unique_vert_indices = np.unique(tri_group)
+                
+                # Remap triangle indices to be 0-based for this material
+                remap = {old_idx: new_idx for new_idx, old_idx in enumerate(unique_vert_indices)}
+                remapped_tris = np.vectorize(remap.get)(tri_group).reshape(-1, 3)
+                
+                # Extract vertices for this material
+                mat_verts = unique_verts[unique_vert_indices]
+                
+                # Stripify if requested
+                if self.export_tristrips:
+                    faces = tristrip.stripify(remapped_tris.tolist(), self.stitch_tristrips)
+                else:
+                    faces = remapped_tris.tolist()
+                
+                if len(mat_verts) < 3:
+                    self.operator.report({'WARNING'}, f'[NUD MESH] {obj.name}, mat {mat_name} has no valid faces and was skipped.')
+                    continue
+                
+                # Create NudMesh
+                mat_mesh = build_nud_mesh_from_verts(mat_verts, faces, num_uvs, use_skinning, 
+                                                     export_tangents=self.export_tangents,
+                                                     high_quality_colors=self.high_quality_colors,
+                                                     high_precision_uvs=self.high_precision_uvs)
                 if mat_mesh is None:
                     self.operator.report({'WARNING'}, f'[NUD MESH] {obj.name}, mat {mat_name} has no valid faces and was skipped.')
                     continue
@@ -877,9 +841,10 @@ class XfbinExporter:
                     continue
 
                 mat_slot = obj.data.materials[mat_name]
-                mat = self.make_xfbin_material(mat_slot, chunk.rigging_flag, clump, context)
+                mat, textures_to_process = self.make_xfbin_material(mat_slot, chunk.rigging_flag, clump, context)
                 chunk.material_chunks.append(mat)
                 mat_mesh.materials = self.make_nud_materials(obj, mat_slot, clump, context)
+                texture_chunks_dict.update(textures_to_process)
 
                 mesh_group.meshes.append(mat_mesh)
 
@@ -890,6 +855,9 @@ class XfbinExporter:
             #update the mesh object
             obj.update_tag()
 
+        # process and add texture chunks
+        for tex_chunk, texture in texture_chunks_dict.values():
+            texture_chunk = self.make_texture(tex_chunk, texture)
 
         return model_chunks
 
@@ -1210,51 +1178,18 @@ class XfbinExporter:
         g = MaterialTextureGroup()
         g.unk = 0
         g.texture_chunks = list()
+        textures_to_process = {}
         for mattex in mat.xfbin_material_data.NUTextures:
             texture: XfbinTextureChunkPropertyGroup = bpy.context.scene.xfbin_texture_chunks_data.texture_chunks.get(mattex.name)
-            t = NuccChunkTexture(texture.path, texture.name)
-            if not texture.reference and self.export_textures:
-                t.has_data = True
-                t.has_props = True
-                t.nut = Nut()
-                t.nut.magic = 'NTP3'
-                t.nut.version = 0x100
-                t.nut.textures = [] 
-                t.nut.texture_count = 0
-
-                if texture.textures:
-                    for tex in texture.textures:
-                        image = tex.image
-                        if image:
-                            if image.packed_file:
-                                image_data = image.packed_file.data
-                            else:
-                                image.pack()
-                                image.source = 'FILE'
-                                image_data = image.packed_file.data
-                            
-                            try:
-                                nuttex: NutTexture = convert_texture(image_data)
-                                t.nut.textures.append(nuttex)
-                                t.nut.texture_count += 1
-                            except Exception as e:
-                                print(e)
-                                self.operator.report({'WARNING'}, f'Could not export texture {tex.name}. Unsupported texture format.')    
-                                continue
-                        else:
-                            self.operator.report({'WARNING'}, f'Could not export texture {tex.name}. Make sure that the image is assigned to the texture.')
-                            continue
-                else:
-                    self.operator.report({'WARNING'}, f'Could not export texture {texture.name}. Make sure that the image is assigned to the texture.')
-                    continue
-
-                if t.nut.texture_count == 0:
-                    #discard the nut chunk if it has no textures
-                    continue
-                
-                #add texture to texture list
-                self.xfbin.add_chunk_page(t)
-
+            
+            texture_hash = hash(texture.name + texture.path)
+            texture_chunk = textures_to_process.get(texture_hash)
+            if not texture_chunk:
+                t = NuccChunkTexture(texture.path, texture.name)
+                textures_to_process[texture_hash] = t, texture
+            else:
+                t = texture_chunk[0]
+            
             g.texture_chunks.append(t)
         
         g2 = MaterialTextureGroup()
@@ -1268,47 +1203,56 @@ class XfbinExporter:
             pg.texGroupsCount = 2
         else:
             pg.texGroupsCount = 1
-            
-
-        return chunk
+        
+        
+        return chunk, textures_to_process
     
-    def make_texture(self, texture_chunk: XfbinTextureChunkPropertyGroup):
+    def make_texture(self, texture_chunk: NuccChunkTexture, texture: XfbinTextureChunkPropertyGroup):
         #Create a texture chunk
-        chunk = NuccChunkTexture(texture_chunk.path, texture_chunk.texture_name)
-        chunk.has_props = True
+        if not texture.reference and self.export_textures:
+            texture_chunk.has_data = True
+            texture_chunk.has_props = True
+            texture_chunk.nut = Nut()
+            texture_chunk.nut.magic = 'NTP3'
+            texture_chunk.nut.version = 0x100
+            texture_chunk.nut.textures = [] 
+            texture_chunk.nut.texture_count = 0
 
-        #Create NUT object
-        nut = chunk.nut = Nut()
-        nut.magic = 'NTP3'
-        nut.version = 0x100
-        nut.textures = []
-        nut.texture_count = 0
-        
-        
-        for texture in texture_chunk.textures:
-            texture: NutTexturePropertyGroup
-            
-            #get image data
-            if not texture.image:
-                self.operator.report({'WARNING'}, f'Could not export texture {texture.name}. Make sure that the image is assigned to the texture.')
-                continue
-            
-            image = texture.image
-
-            if image.packed_file:
-                image_data = image.packed_file.data  
-            
+            if texture.textures:
+                for tex in texture.textures:
+                    tex: NutTexturePropertyGroup
+                    image = tex.image
+                    if image:
+                        if image.packed_file:
+                            image_data = image.packed_file.data
+                        else:
+                            image.pack()
+                            image.source = 'FILE'
+                            image_data = image.packed_file.data
+                        
+                        try:
+                            nuttex: NutTexture = convert_texture(image_data, tex.target_format)
+                            texture_chunk.nut.textures.append(nuttex)
+                            texture_chunk.nut.texture_count += 1
+                        except Exception as e:
+                            print(e)
+                            self.operator.report({'WARNING'}, f'Could not export texture {tex.name}. Unsupported texture format.')    
+                            return None
+                    else:
+                        self.operator.report({'WARNING'}, f'Could not export texture {tex.name}. Make sure that the image is assigned to the texture.')
+                        return None
             else:
-                image.pack()
-                image.source = 'FILE'
-                image_data = image.packed_file.data
+                self.operator.report({'WARNING'}, f'Could not export texture {texture.name}. Make sure that the image is assigned to the texture.')
+                return None
+
+            if texture_chunk.nut.texture_count == 0:
+                #discard the nut chunk if it has no textures
+                return None
             
-            nuttex: NutTexture = DDS_to_NutTexture(read_dds(image_data))
-            
-            nut.textures.append(nuttex)
-            nut.texture_count += 1
+            #add texture to texture list
+            self.xfbin.add_chunk_page(texture_chunk)
         
-        return chunk
+        return texture_chunk
     
     def make_dynamics(self, armature_obj: Object, clump: NuccChunkClump, context) -> NuccChunkDynamics:
         dynamics_data: DynamicsPropertyGroup = armature_obj.xfbin_dynamics_data
@@ -1370,34 +1314,131 @@ class XfbinExporter:
 
         return dynamics
 
-'''def build_nud_mesh_parallel(args):
-    mat_name, face_vert_groups, use_skinning, optimize_meshes, aggressive_optimize = args
+def extract_loop_data_numpy(mesh_obj, mesh, coord_indices_dict, max_influences=4, normals_as_tangents=False, high_quality_colors=False):
+    mesh.calc_loop_triangles()
+    
+    mesh2 = mesh.copy()
+    if mesh2.attributes.get("custom_normal"):
+        mesh2.attributes.remove(mesh2.attributes["custom_normal"])
 
-    vertices_dict = IterativeDict()
-    get_or_next = vertices_dict.get_or_next
+    
+    num_loops = len(mesh.loops)
+    num_verts = len(mesh.vertices)
+    num_tris  = len(mesh.loop_triangles)
 
-    faces = [None] * len(face_vert_groups)
-    for i, verts in enumerate(face_vert_groups):
-        faces[i] = [get_or_next(v) for v in verts]
+    # === Allocate NumPy arrays ===
+    vertex_indices = np.empty(num_loops, dtype=np.int32)
+    loop_normals   = np.empty((num_loops, 3), dtype=np.float32)
+    positions      = np.empty((num_loops, 3), dtype=np.float32)
+    tangents       = np.empty((num_loops, 3), dtype=np.float32)
+    colors         = np.zeros((num_loops, 4), dtype=np.float32)
+    uvs            = [np.zeros((num_loops, 2), dtype=np.float32) for _ in range(len(mesh.uv_layers))]
 
-    if optimize_meshes:
-        faces = tristrip.stripify(faces, aggressive_optimize)
+    mesh.loops.foreach_get("vertex_index", vertex_indices)
+    mesh.loops.foreach_get("normal", loop_normals.ravel())
 
-    vertex_list = list(vertices_dict)
-    if len(vertex_list) < 3:
-        return mat_name, None
+    for uv_index, uv_layer in enumerate(mesh.uv_layers):
+        uv_layer.data.foreach_get("uv", uvs[uv_index].ravel())
+        uvs[uv_index][:, 1] = 1 - uvs[uv_index][:, 1]  # Flip Y
 
-    mesh = NudMesh()
-    mesh.vertices = vertex_list
-    mesh.faces = faces
-    mesh.uv_type = 2
+    if mesh.color_attributes:
+        # requires Blender 4.x 'color_srgb'
+        mesh.color_attributes[0].data.foreach_get("color_srgb", colors.ravel())
+        if not high_quality_colors:
+            colors = (colors[:, :4] * 255).astype(np.uint8)
 
-    if use_skinning:
-        mesh.vertex_type, mesh.bone_type, mesh.face_flag = 0x03, 0x10, 0x04
+    # === Vertex positions (transformed) ===
+    vert_positions = np.empty((num_verts, 3), dtype=np.float32)
+    mesh.vertices.foreach_get("co", vert_positions.ravel())
+    positions[:] = vert_positions[vertex_indices] * 100.0  # Scale to cm
+
+    # === Tangents or "normals as tangents" ===
+    if normals_as_tangents:
+        vert_normals = np.empty((num_verts, 3), dtype=np.float32)
+        mesh2.vertices.foreach_get("normal", vert_normals.ravel())
+        tangents[:] = vert_normals[vertex_indices]
     else:
-        mesh.vertex_type, mesh.bone_type, mesh.face_flag = 0x07, 0x00, 0x00
+        mesh.loops.foreach_get("tangent", tangents.ravel())
+    
+    bpy.data.meshes.remove(mesh2)
 
-    return mat_name, mesh'''
+    # === Process bone weights efficiently ===
+    vertex_groups = mesh_obj.vertex_groups
+    
+    # First calculate weights per vertex
+    vertex_bone_ids = np.zeros((num_verts, max_influences), dtype=">u4")
+    vertex_weights = np.zeros((num_verts, max_influences), dtype=np.float32)
+    
+    for v_idx, vertex in enumerate(mesh.vertices):
+        # Get valid bone influences for this vertex
+        influences = []
+        for group in vertex.groups:
+            if group.weight > 0:
+                group_name = vertex_groups[group.group].name
+                if group_name in coord_indices_dict:
+                    influences.append((coord_indices_dict[group_name], group.weight))
+        
+        if influences:
+            # Sort by weight (descending) and limit influences
+            influences.sort(key=lambda x: x[1], reverse=True)
+            influences = influences[:max_influences]
+            
+            # Normalize weights
+            total_weight = sum(weight for _, weight in influences)
+            if total_weight > 0:
+                for i, (bone_idx, weight) in enumerate(influences):
+                    vertex_bone_ids[v_idx, i] = bone_idx
+                    vertex_weights[v_idx, i] = weight / total_weight
+            else:
+                # Edge case: weights sum to 0
+                vertex_weights[v_idx, max_influences-1] = 1.0
+        else:
+            # No valid influences - use default
+            vertex_weights[v_idx, max_influences-1] = 1.0
+    
+    # Map vertex weights to loops for per-loop data
+    bone_ids = vertex_bone_ids[vertex_indices]
+    weights = vertex_weights[vertex_indices]
+
+    # === Triangle index data ===
+    loop_tri_indices = np.empty((num_tris, 3), dtype=np.uint32)
+    material_indices = np.empty(num_tris, dtype=np.uint8)
+    mesh.loop_triangles.foreach_get("loops", loop_tri_indices.ravel())
+    mesh.loop_triangles.foreach_get("material_index", material_indices)
+
+    return {
+        "positions": positions,
+        "normals": loop_normals,
+        "tangents": tangents,
+        "uvs": uvs,
+        "colors": colors,
+        "bone_ids": bone_ids,
+        "weights": weights,
+        "loop_tri_indices": loop_tri_indices,
+        "material_indices": material_indices,
+        "vertex_indices": vertex_indices
+    }
+    
+
+def dedupe_vertices_structured(verts, tri_indices, material_indices):
+    """
+    verts: structured numpy array, shape (num_loops,)
+    tri_indices: (num_tris, 3) int array referring to loop indices
+    material_indices: (num_tris,) int array
+    """
+
+    raw = verts.view(np.void)  # shape (num_loops,)
+
+    unique_raw, unique_index, inverse_map = np.unique(
+        raw, return_index=True, return_inverse=True
+    )
+
+    unique_verts = verts[unique_index]
+
+    unique_tris = inverse_map[tri_indices]
+
+    return unique_verts, unique_tris, material_indices
+
 
 def make_vertex_dtype(num_uvs):
     dtype = [
@@ -1415,66 +1456,37 @@ def make_vertex_dtype(num_uvs):
     ]
     return np.dtype(dtype)
 
-def build_nud_mesh_parallel(args):
-    mat_name, triangle_indices, loop_data, use_skinning, optimize_meshes, aggressive_optimize = args
-
-    positions = loop_data['positions']
-    normals = loop_data['normals']
-    tangents = loop_data['tangents']
-    bitangents = np.cross(normals, tangents)
-    uvs = loop_data['uvs']  # list of (N, 2) arrays
-    colors = loop_data['colors']
-    bone_ids = loop_data['bone_ids']
-    weights = loop_data['weights']
-
-    flat_loops = triangle_indices.reshape(-1)
-    num_uvs = len(uvs)
-
-    dtype = make_vertex_dtype(num_uvs)
-    num_loops = len(flat_loops)
-    structured = np.empty(num_loops, dtype=dtype)
-
-    structured['position'] = positions[flat_loops]
-    structured['normal'] = normals[flat_loops]
-    structured['tangent'] = tangents[flat_loops]
-    structured['bitangent'] = bitangents[flat_loops]
-
-    for i, uv in enumerate(uvs):
-        structured[f'uv{i}'] = uv[flat_loops]
-
-    if colors is not None:
-        structured['color'] = colors[flat_loops]
-    else:
-        structured['color'][:] = 255
-
-    if use_skinning:
-        structured['bone_ids'] = bone_ids[flat_loops]
-        structured['bone_weights'] = weights[flat_loops]
-    else:
-        structured['bone_ids'][:] = (0, 0, 0, 0)
-        structured['bone_weights'][:] = (0, 0, 0, 1)
-
-    # Deduplicate
-    unique, inverse_indices = np.unique(structured, return_inverse=True)
-
-    faces = inverse_indices.reshape(triangle_indices.shape)
-
-    if optimize_meshes:
-        faces = tristrip.stripify(faces.tolist(), aggressive_optimize)
-
-    if len(unique) < 3:
-        return mat_name, None
+def build_nud_mesh_from_verts(unique_verts, faces, num_uvs, use_skinning=True, export_tangents=False, high_quality_colors=False, high_precision_uvs=False):
+    """Build a NudMesh from already-deduplicated vertices and faces."""
+    if len(unique_verts) < 3:
+        return None
 
     mesh = NudMesh()
-    mesh.vertices = unique
+    mesh.vertices = unique_verts
     mesh.faces = faces
     mesh.uv_type = 2
-    mesh.vertex_type, mesh.bone_type, mesh.face_flag = (
-        (0x03, 0x10, 0x04) if use_skinning else (0x07, 0x00, 0x00)
-    )
+    if high_precision_uvs:
+        mesh.uv_type |= 0x01
+    if high_quality_colors:
+        mesh.uv_type |= 0x04
+    
+    bone_type = 0x00
+    face_flag = 0x00
+    vertex_type = 0x01  # positions, normals
+    if export_tangents:
+        vertex_type |= 0x02  # tangents, bitangents
+    if use_skinning:
+        bone_type = 0x10  # bone IDs and weights
+        face_flag = 0x04  # skinned faces
 
-    return mat_name, mesh
+
+            
+    
+    mesh.vertex_type, mesh.bone_type, mesh.face_flag = (vertex_type, bone_type, face_flag)
+
+    return mesh
 
 
 def menu_func_export(self, context):
     self.layout.operator(ExportXfbin.bl_idname, text='XFBIN Model Container (.xfbin)')
+

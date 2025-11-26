@@ -14,9 +14,10 @@ from .panels.clump_panel import (ClumpPropertyGroup, clump_classes,
                                  clump_property_groups)
 from .panels.materials_panel import (XfbinMaterialPropertyGroup,
                                      XfbinMatClipboardPropertyGroup,
-                                     XfbinSceneManagerPropertyGroup,
                                         material_classes,
                                         material_property_groups)
+
+from .panels.scene_manager_panel import XfbinSceneManagerPropertyGroup, scene_classes
 from .panels.common import EmptyPropertyGroup, clear_clipboard, common_classes
 from .panels.nud_mesh_panel import (NudMeshPropertyGroup, nud_mesh_classes,
                                     nud_mesh_property_groups)
@@ -54,6 +55,7 @@ classes = (
     ImportXFBIN,
     DropXFBIN,
     ExportXfbin,
+    *scene_classes,
     *texture_chunks_classes,
     *material_classes,
     *clump_classes,
