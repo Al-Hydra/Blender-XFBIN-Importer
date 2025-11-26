@@ -1278,10 +1278,13 @@ class XfbinExporter:
             d.Movement = spring_group.dyn4
             d.coord_index = armature_obj.data.bones.find(spring_group.bone_spring)
             d.BonesCount = len(armature_obj.data.bones[spring_group.bone_spring].children_recursive) + 1
+            flag = 0
+            if spring_group.ignore_animations:
+                flag |= 1
             if spring_group.maintain_shape:
-                d.shorts = [2] * d.BonesCount
-            else:
-                d.shorts = [0] * d.BonesCount
+                flag |= 2
+            
+            d.shorts = [flag] * d.BonesCount
             
             dynamics.SPGroup.append(d)
             #spring_group_names.append(spring_group.bone_spring)

@@ -269,6 +269,10 @@ class SpringGroupsPropertyGroup(PropertyGroup):
     spring_group_index: IntProperty(
         name= 'Spring Group Index'
     )
+    
+    ignore_animations: BoolProperty(
+        name='Ignore Animations',
+    )
 
     maintain_shape: BoolProperty(
         name='Maintain Shape',
@@ -297,6 +301,8 @@ class SpringGroupsPropertyGroup(PropertyGroup):
             f.value = flag
             if flag & 2:
                 self.maintain_shape = True
+            if flag & 1:
+                self.ignore_animations = True
             
             
 class CollisionSpheresPropertyGroup(PropertyGroup):
@@ -574,6 +580,7 @@ class DynamicsPropertyPanel(Panel):
             row.prop(spring_groups, 'dyn3')
             row.prop(spring_groups, 'dyn4')
             row.prop(spring_groups, 'maintain_shape')
+            row.prop(spring_groups, 'ignore_animations')
             #matrix_prop_group(box, spring_groups, 'flags', spring_groups.bone_count, 'Bone Flags')
 
         
@@ -1163,6 +1170,7 @@ class XFBIN_OT_CopySpringBoneSettings(bpy.types.Operator):
                 sg.dyn3 = active_sg.dyn3
                 sg.dyn4 = active_sg.dyn4
                 sg.maintain_shape = active_sg.maintain_shape
+                sg.ignore_animations = active_sg.ignore_animations
                 sg.flags.clear()
                 for f in active_sg.flags:
                     sg.flags.add().value = f.value
@@ -1200,6 +1208,7 @@ class DynamicBoneBufferEntry(bpy.types.PropertyGroup):
     dyn3: bpy.props.FloatProperty(name="Stiffness")
     dyn4: bpy.props.FloatProperty(name="Movement")
     maintain_shape: bpy.props.BoolProperty(name="Maintain Shape")
+    ignore_animations: bpy.props.BoolProperty(name="Ignore Animations")
 
 
 class DynamicsCollidorBufferEntry(bpy.types.PropertyGroup):
@@ -1278,6 +1287,7 @@ class XFBIN_OT_DynamicBonesExtendedCopy(bpy.types.Operator):
                 entry.dyn3 = sg.dyn3
                 entry.dyn4 = sg.dyn4
                 entry.maintain_shape = sg.maintain_shape
+                entry.ignore_animations = sg.ignore_animations
                 
                 # Check if bone has children
                 entry.has_children = bool(bone.children)
@@ -1357,6 +1367,7 @@ class XFBIN_OT_DynamicBonesExtendedPaste(bpy.types.Operator):
             sg.dyn3 = entry.dyn3
             sg.dyn4 = entry.dyn4
             sg.maintain_shape = entry.maintain_shape
+            sg.ignore_animations = entry.ignore_animations
             
             if buffer.copy_bones:
                 # create the bone and its children
