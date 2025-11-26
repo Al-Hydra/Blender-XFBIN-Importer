@@ -213,6 +213,8 @@ class BrNudMesh(BrStruct):
                 colorSize = 8 # 4 half-float colors
                 uv_color_dtype_fields.append(('color', '>f2', 4))
             
+            uvSize *= uvCount
+            
             for i in range(uvCount):
                 if uvColorType & 1:
                     uv_color_dtype_fields.append((f'uv{i}', '>f4', 2))

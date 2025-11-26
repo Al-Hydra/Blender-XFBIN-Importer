@@ -230,6 +230,10 @@ class NutTexturePropertyGroup(PropertyGroup):
                 self.pixel_format = 'RGBA8'
                 self.image_type = 'PNG'
                 self.target_format = 'R8G8B8A8'
+            elif tex_type == 'TGA':
+                self.pixel_format = 'RGBA8'
+                self.image_type = 'TGA'
+                self.target_format = 'R8G8B8A8'
             
         else:
             self.width = ''

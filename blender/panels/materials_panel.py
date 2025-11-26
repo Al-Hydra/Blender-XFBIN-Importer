@@ -1443,6 +1443,7 @@ class XFBIN_MatTexture_Open(bpy.types.Operator):
         texture_type, texture = read_texture_from_file(self.filepath)
         if texture_type == 'DDS':
             dds_texture: DDS = texture
+            subtexture.image_type = 'DDS'
             #check if the dds is in a supported format
             if dds_texture.header.pixel_format.fourCC in nut_pf_fourcc.keys():
                 pixel_format = str(nut_pf_fourcc[dds_texture.header.pixel_format.fourCC])
@@ -1465,6 +1466,7 @@ class XFBIN_MatTexture_Open(bpy.types.Operator):
             png_texture: PNG = texture
             #set the pixel format to RGBA8 for PNGs
             pixel_format = 'RGBA8'
+            subtexture.image_type = 'PNG'
             subtexture.pixel_format = pixel_format
             width = png_texture.IHDR.Width
             height = png_texture.IHDR.Height
@@ -1473,6 +1475,7 @@ class XFBIN_MatTexture_Open(bpy.types.Operator):
             tga_texture: TGA = texture
             #set the pixel format to RGBA8 for TGAs
             pixel_format = 'RGBA8'
+            subtexture.image_type = 'TGA'
             subtexture.pixel_format = pixel_format
             width = tga_texture.Width
             height = tga_texture.Height
