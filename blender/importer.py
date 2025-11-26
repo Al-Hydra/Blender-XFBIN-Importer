@@ -521,6 +521,10 @@ class XfbinImporter:
             uv3_arrays = []
             boneID_arrays = []
             boneWeight_arrays = []
+            has_uv0 = False
+            has_uv1 = False
+            has_uv2 = False
+            has_uv3 = False
 
             #create a bmesh to store all the submeshes
             bm = bmesh.new()
@@ -541,18 +545,39 @@ class XfbinImporter:
                     
                     verts = [bm.verts.new((pos[0] * 0.01, pos[1] * 0.01, pos[2] * 0.01)) for pos in mesh.vertices['position']]
                     bm.verts.ensure_lookup_table()
+                    
+                    vertex_count = len(mesh.vertices)
+                    
                     if 'normal' in mesh.vertices.dtype.names:
                         normal_arrays.append(mesh.vertices['normal'])
                     if 'color' in mesh.vertices.dtype.names:
                         color_arrays.append(mesh.vertices['color'])
+                    
+                    # UV channels - pad with zeros if missing
                     if 'uv0' in mesh.vertices.dtype.names:
                         uv0_arrays.append(mesh.vertices['uv0'])
+                        has_uv0 = True
+                    else:
+                        uv0_arrays.append(np.zeros((vertex_count, 2), dtype=np.float32))
+                    
                     if 'uv1' in mesh.vertices.dtype.names:
                         uv1_arrays.append(mesh.vertices['uv1'])
+                        has_uv1 = True
+                    else:
+                        uv1_arrays.append(np.zeros((vertex_count, 2), dtype=np.float32))
+                    
                     if 'uv2' in mesh.vertices.dtype.names:
                         uv2_arrays.append(mesh.vertices['uv2'])
+                        has_uv2 = True
+                    else:
+                        uv2_arrays.append(np.zeros((vertex_count, 2), dtype=np.float32))
+                    
                     if 'uv3' in mesh.vertices.dtype.names:
                         uv3_arrays.append(mesh.vertices['uv3'])
+                        has_uv3 = True
+                    else:
+                        uv3_arrays.append(np.zeros((vertex_count, 2), dtype=np.float32))
+                    
                     if 'bone_ids' in mesh.vertices.dtype.names:
                         boneID_arrays.append(mesh.vertices['bone_ids'])
                     if 'bone_weights' in mesh.vertices.dtype.names:
@@ -577,7 +602,7 @@ class XfbinImporter:
             all_boneIDs = np.concatenate(boneID_arrays) if boneID_arrays else None
             all_boneWeights = np.concatenate(boneWeight_arrays) if boneWeight_arrays else None
             
-            
+
             #print(f"vertex count: {len(blender_mesh.vertices)}, normal count: {len(all_normals) if all_normals is not None else 0}")
             
             # set smooth shading
@@ -603,7 +628,7 @@ class XfbinImporter:
                 
                 color_data.foreach_set("color", loop_colors.flatten())
             #apply UVs
-            if all_uv0 is not None:
+            if has_uv0 and all_uv0 is not None:
                 uv0_layer = blender_mesh.uv_layers.new(name="UV_0")
                 uv0_data = uv0_layer.data
                 uv0s = all_uv0.astype(np.float32)
@@ -611,7 +636,7 @@ class XfbinImporter:
                 loop_uv0s = uv0s[loop_vert_indices]
                 uv0_data.foreach_set("uv", loop_uv0s.flatten())
             
-            if all_uv1 is not None:
+            if has_uv1 and all_uv1 is not None:
                 uv1_layer = blender_mesh.uv_layers.new(name="UV_1")
                 uv1_data = uv1_layer.data
                 uv1s = all_uv1.astype(np.float32)
@@ -619,14 +644,14 @@ class XfbinImporter:
                 loop_uv1s = uv1s[loop_vert_indices]
                 uv1_data.foreach_set("uv", loop_uv1s.flatten())
             
-            if all_uv2 is not None:
+            if has_uv2 and all_uv2 is not None:
                 uv2_layer = blender_mesh.uv_layers.new(name="UV_2")
                 uv2_data = uv2_layer.data
                 uv2s = all_uv2.astype(np.float32)
                 uv2s[:,1] = 1.0 - uv2s[:,1]
                 loop_uv2s = uv2s[loop_vert_indices]
                 uv2_data.foreach_set("uv", loop_uv2s.flatten())
-            if all_uv3 is not None:
+            if has_uv3 and all_uv3 is not None:
                 uv3_layer = blender_mesh.uv_layers.new(name="UV_3")
                 uv3_data = uv3_layer.data
                 uv3s = all_uv3.astype(np.float32)
