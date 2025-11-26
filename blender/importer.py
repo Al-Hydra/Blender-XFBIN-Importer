@@ -585,9 +585,15 @@ class XfbinImporter:
                     
                     
                     for face in mesh.faces:
-                        face_verts = [bm.verts[vCount + face[i]] for i in range(3)]
-                        f = bm.faces.new(face_verts)
-                        f.material_index = mat_index
+                        try:
+                            face_verts = [bm.verts[vCount + vi] for vi in face]
+                            f = bm.faces.new(face_verts)
+                            f.material_index = mat_index
+                        except Exception as e:
+                            #print(f"Error creating face with verts {face_verts} in mesh {mesh.name} \n"
+                            #      f"Error message: {e}")
+                            pass
+                        
             
             bm.to_mesh(blender_mesh)
             bm.free()
@@ -669,15 +675,20 @@ class XfbinImporter:
             
             # add vertex weights
             if all_boneIDs is not None and all_boneWeights is not None:
-                for i, v in enumerate(blender_mesh.vertices):
-                    for j in range(4): 
-                        bone_id = all_boneIDs[i][j]
-                        weight = all_boneWeights[i][j]
-                        if weight > 0:
-                            group_name = vertex_group_list[bone_id]
-                            group = mesh_obj.vertex_groups.get(group_name)
-                            if group:
-                                group.add([i], weight, 'ADD')
+                # Vectorized vertex weight assignment
+                num_verts = len(all_boneIDs)
+                for bone_idx in range(len(vertex_group_list)):
+                    # Find all vertices that have this bone with non-zero weight
+                    mask = (all_boneIDs == bone_idx) & (all_boneWeights > 0)
+                    vert_indices, weight_slot = np.where(mask)
+                    
+                    if len(vert_indices) > 0:
+                        group = mesh_obj.vertex_groups[bone_idx]
+                        weights = all_boneWeights[vert_indices, weight_slot]
+                        
+                        # Add all weights for this bone at once
+                        for vert_idx, weight in zip(vert_indices, weights):
+                            group.add([int(vert_idx)], weight, 'ADD')
             
             
             # Set the NUD properties
@@ -819,18 +830,18 @@ class XfbinImporter:
         # Make a mesh to store the primitive vertex data
         mesh = bpy.data.meshes.new(f'{name}')
 
-        # Extract UV and color data from structured array
-        has_uv = 'uv0' in vertices.dtype.names
-        has_color = 'color' in vertices.dtype.names
+        # Check if vertices have UV and color attributes
+        has_uv = hasattr(vertices[0], 'uv0') if len(vertices) > 0 else False
+        has_color = hasattr(vertices[0], 'color') if len(vertices) > 0 else False
 
         for i in range(0, len(vertices), 3):
             # add verts
-            bmv1 = bm.verts.new(vertices[i]['position'])
-            bmv1.normal = vertices[i]['normal']
-            bmv2 = bm.verts.new(vertices[i+1]['position'])
-            bmv2.normal = vertices[i+1]['normal']
-            bmv3 = bm.verts.new(vertices[i+2]['position'])
-            bmv3.normal = vertices[i+2]['normal']
+            bmv1 = bm.verts.new(vertices[i].position)
+            bmv1.normal = vertices[i].normal
+            bmv2 = bm.verts.new(vertices[i+1].position)
+            bmv2.normal = vertices[i+1].normal
+            bmv3 = bm.verts.new(vertices[i+2].position)
+            bmv3.normal = vertices[i+2].normal
 
             # draw faces
             face = bm.faces.new((bmv1, bmv2, bmv3))
@@ -845,52 +856,29 @@ class XfbinImporter:
         # apply the changes to the mesh we created
         bm.to_mesh(mesh)
 
+        # free bmesh
+        bm.free()
+
         #add uv data
         if has_uv:
             mesh.uv_layers.new(name='UVMap')
             uv_layer = mesh.uv_layers.active.data
             for i, uv in enumerate(uv_layer):
-                uv.uv = vertices[i]['uv0']
+                uv.uv = vertices[i].uv0
         
         #add color data
         if has_color:
             mesh.vertex_colors.new(name='Color')
             color_layer = mesh.vertex_colors.active.data
             for i, color in enumerate(color_layer):
-                color.color = vertices[i]['color']
-
-        # free bmesh
-        bm.free()
+                color.color = vertices[i].color
         
         # create a new object with our mesh data
         obj = bpy.data.objects.new(f'{name}', mesh)
 
         return obj
 
-    '''def make_texture(self, name, nut_texture: NuccChunkTexture):
-        #convert Nut Texture to DDS
-        self.texture_data = dds.NutTexture_to_DDS(nut_texture)
 
-
-        if bpy.data.images.get(self.name):
-            #update existing image
-            self.image = bpy.data.images[name]
-            self.image.pack(data=self.texture_data, data_len=len(self.texture_data))
-            self.image.source = 'FILE'
-            self.image.filepath_raw = path
-            self.image.use_fake_user = True
-            self.image['nut_pixel_format'] = self.pixel_format        
-
-        else:
-            #create new image
-            self.image = bpy.data.images.new(tex_name, width=self.width, height=self.height)
-            self.image.pack(data=self.texture_data, data_len=len(self.texture_data))
-            self.image.source = 'FILE'
-            self.image.filepath_raw = path
-            self.image.use_fake_user = True
-            #add custom properties to the image
-            self.image['nut_pixel_format'] = self.pixel_format  
-            self.image['nut_mipmaps_count'] = self.mipmap_count   '''
 
     def make_material(self, xfbin_mat: NuccChunkMaterial, mesh, mesh_flags) -> Material:
         material_name = xfbin_mat.name
