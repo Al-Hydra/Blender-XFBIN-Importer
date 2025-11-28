@@ -7,7 +7,7 @@ import time
 
 import bmesh
 import bpy
-from bpy.props import (BoolProperty, CollectionProperty, EnumProperty,
+from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProperty,
                        StringProperty)
 from bpy.types import (Armature, EditBone, Mesh, MeshLoop, MeshLoopTriangle,
                        MeshVertex, Object, Operator)
@@ -21,7 +21,7 @@ from ..xfbin_lib.xfbin.structure.nucc import (ClumpModelGroup, CoordNode,
                                               Dynamics1, Dynamics2,
                                               MaterialTextureGroup, ModelHit,
                                               NuccChunkClump, NuccChunkCoord,
-                                              NuccChunkDynamics,
+                                              NuccChunkDynamics, NuccChunk,
                                               NuccChunkMaterial,
                                               NuccChunkModel,
                                               NuccChunkModelHit, NuccChunkNull,
@@ -59,6 +59,7 @@ from .panels.materials_panel import (NUD_ShaderPropertyGroup, NUD_ShaderParamPro
 from .utils.tristrip import tristrip
 from collections import defaultdict
 import numpy as np
+#import cProfile
 #from .tristrip import rust_loader
 
 class ExportXfbin(Operator, ExportHelper):
@@ -213,6 +214,36 @@ class ExportXfbin(Operator, ExportHelper):
         default=False,
     )
     
+    rename_content: BoolProperty(
+        name='Rename Content',
+        description='If True, will rename the content during export.',
+        default=False,
+    )
+    
+    source_name: StringProperty(
+        name='Source Name',
+        description='Name of the source content.',
+        default='',
+    )
+    
+    target_name: StringProperty(
+        name='Target Name',
+        description='Name of the target content.',
+        default='',
+    )
+    
+    round_precision: BoolProperty(
+        name='Round Precision',
+        description='If True, will round vertex attributes to reduce precision during export.',
+        default=False,
+    )
+    
+    rounding_threshold: FloatProperty(
+        name='Rounding Threshold',
+        description='Threshold for rounding vertex attributes during export.',
+        default=0.0001,
+    )
+    
     def draw(self, context):
         layout = self.layout
 
@@ -237,6 +268,12 @@ class ExportXfbin(Operator, ExportHelper):
             
             layout.prop(self, 'high_precision_uvs')
             layout.prop(self, 'high_quality_colors')
+            
+            layout.prop(self, 'rename_content')
+            if self.rename_content:
+                box = layout.box()
+                box.prop(self, 'source_name')
+                box.prop(self, 'target_name')
             
             layout.prop(self, 'export_textures')
             layout.prop(self, 'export_clumps')
@@ -309,10 +346,12 @@ class ExportXfbin(Operator, ExportHelper):
         start_time = time.time()
         exporter = XfbinExporter(self, self.filepath, self.as_keywords(ignore=('filter_glob',)))
         exporter.export_collection(context)
-
         elapsed_s = "{:.2f}s".format(time.time() - start_time)
         self.report({'INFO'}, f'Finished exporting {exporter.collection.name} in {elapsed_s}')
         print(f'Finished exporting {exporter.collection.name} in {elapsed_s}')
+        
+
+        
         return {'FINISHED'}
         # except Exception as e:
         #     print(e)
@@ -324,24 +363,12 @@ class XfbinExporter:
     def __init__(self, operator: Operator, filepath: str, export_settings: dict):
         self.operator = operator
         self.filepath = filepath
-        self.collection: bpy.types.Collection = bpy.data.collections[export_settings.get('collection')]
-
-        self.inject_to_xfbin = export_settings.get('inject_to_xfbin')
-        self.export_tristrips = export_settings.get('export_tristrips')
-        self.stitch_tristrips = export_settings.get('stitch_tristrips')
-        self.export_clumps = export_settings.get('export_clumps')
-        self.export_meshes = export_settings.get('export_meshes')
-        self.export_bones = export_settings.get('export_bones')
-        self.use_original_coords = export_settings.get('use_original_coords')
-        self.export_textures = export_settings.get('export_textures')
-        self.inject_to_clump = export_settings.get('inject_to_clump')
-        self.export_specific_meshes = export_settings.get('export_specific_meshes')
-        self.meshes_to_export = export_settings.get('meshes_to_export')
-        self.export_dynamics = export_settings.get('export_dynamics')
-        self.export_tangents = export_settings.get('export_tangents')
-        self.normals_as_tangents = export_settings.get('normals_as_tangents')
-        self.high_quality_colors = export_settings.get('high_quality_colors')
-        self.high_precision_uvs = export_settings.get('high_precision_uvs')
+        
+        for key in export_settings:
+            # add attribute
+            setattr(self, key, export_settings[key])
+        
+        self.collection: bpy.types.Collection = bpy.data.collections[self.collection]
 
     xfbin: Xfbin
 
@@ -414,10 +441,33 @@ class XfbinExporter:
                             new_model = new_group_models.get(model.name)
                             if new_model is not None:
                                 model.copy_from(new_model)
-
+                                
+        # before wriitng the xfbin, rename content if needed
+        '''if self.rename_content and self.source_name and self.target_name:
+            # rename everything in the xfbin including paths
+            for page in self.xfbin.pages:
+                for chunk in page.chunks:
+                    chunk: NuccChunk
+                    chunk.name = chunk.name.replace(self.source_name, self.target_name)
+                    print(chunk.name)
+                    chunk.filePath = chunk.filePath.replace(self.source_name, self.target_name)
+                    print(chunk.filePath)
+                    
+                        
+                for reference in page.chunk_references:
+                    reference: NuccChunk
+                    reference.name = reference.name.replace(self.source_name, self.target_name)
+                    reference.filePath = reference.filePath.replace(self.source_name, self.target_name)'''
         # Write the xfbin
         write_xfbin_to_path(self.xfbin, self.filepath)
-        
+    
+    
+    def create_chunk(self, chunk_type: type, file_path: str, name: str) -> NuccChunk:
+        if self.rename_content and self.source_name and self.target_name:
+            file_path = file_path.replace(self.source_name, self.target_name)
+            name = name.replace(self.source_name, self.target_name)
+        return chunk_type(file_path, name)
+    
 
     def make_clump(self, armature_obj: Object, context) -> NuccChunkClump:
         """Creates and returns a NuccChunkClump made from an Armature and its child meshes."""
@@ -431,7 +481,8 @@ class XfbinExporter:
         clump_data: ClumpPropertyGroup = armature_obj.xfbin_clump_data
 
         # Remove the added " [C]" from the clump's name if it exists
-        clump = NuccChunkClump(clump_data.path, armature.name[:-4] if armature.name.endswith(' [C]') else armature.name)
+        #clump = #NuccChunkClump(clump_data.path, armature.name[:-4] if armature.name.endswith(' [C]') else armature.name)
+        clump = self.create_chunk(NuccChunkClump, clump_data.path, armature.name[:-4] if armature.name.endswith(' [C]') else armature.name)
         old_clump = None
         clump.has_data = True
         clump.has_props = True
@@ -482,7 +533,10 @@ class XfbinExporter:
                 g.flag0 = group.flag0
                 g.flag1 = group.flag1
                 g.unk = group.unk
-                g.model_chunks = [model_chunks[c.value] for c in group.models if c.value in model_chunks]
+                if self.rename_content and self.source_name and self.target_name:
+                    g.model_chunks = [model_chunks[c.value.replace(self.source_name, self.target_name)] for c in group.models if c.value.replace(self.source_name, self.target_name) in model_chunks]
+                else:
+                    g.model_chunks = [model_chunks[c.value] for c in group.models if c.value in model_chunks]
 
                 clump.model_groups.append(g)
             
@@ -493,7 +547,10 @@ class XfbinExporter:
                 g.flag0 = group.flag0
                 g.flag1 = group.flag1
                 g.unk = group.unk
-                g.model_chunks = [model_chunks[c.value] for c in group.models if c.value in model_chunks]
+                if self.rename_content and self.source_name and self.target_name:
+                    g.model_chunks = [model_chunks[c.value.replace(self.source_name, self.target_name)] for c in group.models if c.value.replace(self.source_name, self.target_name) in model_chunks]
+                else:
+                    g.model_chunks = [model_chunks[c.value] for c in group.models if c.value in model_chunks]
 
                 clump.extra_groups.append(g)
             
@@ -514,7 +571,8 @@ class XfbinExporter:
         
 
         def make_coord(bone: EditBone, coord_parent: CoordNode = None, parent_matrix: Matrix = Matrix.Identity(4)):
-            coord = NuccChunkCoord(clump.filePath, bone.name)
+            #coord = NuccChunkCoord(clump.filePath, bone.name)
+            coord = self.create_chunk(NuccChunkCoord, clump.filePath, bone.name)
             coord.node = CoordNode(coord)
             coord.has_props = True
             coord.has_data = True
@@ -558,7 +616,8 @@ class XfbinExporter:
                 make_coord(c, node, bone.matrix_local)
         
         def make_coord_og(bone: EditBone, coord_parent: CoordNode = None, parent_matrix: Matrix = Matrix.Identity(4)):
-            coord = NuccChunkCoord(clump.filePath, bone.name)
+            #coord = NuccChunkCoord(clump.filePath, bone.name)
+            coord = self.create_chunk(NuccChunkCoord, clump.filePath, bone.name)
             coord.node = CoordNode(coord)
             coord.has_props = True
             coord.has_data = True
@@ -629,11 +688,17 @@ class XfbinExporter:
         model_chunks = list()
         texture_chunks_dict = {}
 
-        coord_indices_dict = {
-            name: i
-            for i, name in enumerate([c.name for c in clump.coord_chunks])
-        }
-
+        if self.rename_content and self.source_name and self.target_name:
+            coord_indices_dict = {
+                name.replace(self.target_name, self.source_name): i
+                for i, name in enumerate([c.name for c in clump.coord_chunks])
+            }
+            
+        else:
+            coord_indices_dict = {
+                name: i
+                for i, name in enumerate([c.name for c in clump.coord_chunks])
+            }
         # Get a list of all models in from the old clump
         old_clump_all_models = list(dict.fromkeys(
             chain(old_clump.model_chunks, *old_clump.model_groups))) if old_clump else None
@@ -654,7 +719,8 @@ class XfbinExporter:
 
             nud_data: NudPropertyGroup = obj.xfbin_nud_data
             # Create the chunk and set its properties
-            chunk = NuccChunkModel(clump.filePath, obj.name)
+            #chunk = NuccChunkModel(clump.filePath, obj.name)
+            chunk = self.create_chunk(NuccChunkModel, clump.filePath, obj.name)
             chunk.clump_chunk = clump
             chunk.has_data = True
             chunk.has_props = True
@@ -785,7 +851,7 @@ class XfbinExporter:
                 structured['bone_ids'][:] = (0, 0, 0, 0)
                 structured['bone_weights'][:] = (0, 0, 0, 1)
             
-            # Deduplicate vertices globally
+            # Deduplicate vertices
             unique_verts, unique_tri_indices, _ = dedupe_vertices_structured(
                 structured, loop_tri_indices, material_indices
             )
@@ -863,7 +929,8 @@ class XfbinExporter:
 
     def make_modelhit(self, obj, clump, context):
         modelhit_data = obj.xfbin_modelhit_data
-        modelhit = NuccChunkModelHit(clump.filePath, obj.name[:-6] if obj.name.endswith('_[HIT]') else obj.name)
+        #modelhit = NuccChunkModelHit(clump.filePath, obj.name[:-6] if obj.name.endswith('_[HIT]') else obj.name)
+        modelhit = self.create_chunk(NuccChunkModelHit, clump.filePath, obj.name[:-6] if obj.name.endswith('_[HIT]') else obj.name)
         modelhit.mesh_count = len(obj.children)
         modelhit.has_props = True
         modelhit.has_data = True
@@ -1136,7 +1203,8 @@ class XfbinExporter:
     def make_xfbin_material(self, mat, flags: RiggingFlag, clump: NuccChunkClump, context) -> NuccChunkMaterial:
         pg = mat.xfbin_material_data
 
-        chunk = NuccChunkMaterial(clump.filePath, mat.name)
+        #chunk = NuccChunkMaterial(clump.filePath, mat.name)
+        chunk = self.create_chunk(NuccChunkMaterial, clump.filePath, mat.name)
         chunk.has_data = True
         chunk.has_props = True
 
@@ -1185,7 +1253,8 @@ class XfbinExporter:
             texture_hash = hash(texture.name + texture.path)
             texture_chunk = textures_to_process.get(texture_hash)
             if not texture_chunk:
-                t = NuccChunkTexture(texture.path, texture.name)
+                #t = NuccChunkTexture(texture.path, texture.name)
+                t = self.create_chunk(NuccChunkTexture, texture.path, texture.name)
                 textures_to_process[texture_hash] = t, texture
             else:
                 t = texture_chunk[0]
@@ -1257,7 +1326,8 @@ class XfbinExporter:
     def make_dynamics(self, armature_obj: Object, clump: NuccChunkClump, context) -> NuccChunkDynamics:
         dynamics_data: DynamicsPropertyGroup = armature_obj.xfbin_dynamics_data
         clump_data: ClumpPropertyGroup = armature_obj.xfbin_clump_data
-        dynamics = NuccChunkDynamics(clump_data.path, clump_data.name)
+        #dynamics = NuccChunkDynamics(clump_data.path, clump_data.name)
+        dynamics = self.create_chunk(NuccChunkDynamics, clump_data.path, clump_data.name)
         dynamics.has_data = True
         dynamics.has_props = True
         dynamics.clump_chunk = clump

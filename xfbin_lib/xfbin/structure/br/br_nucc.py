@@ -120,6 +120,7 @@ class BrNuccChunkTexture(BrNuccChunk):
 
         with BinaryReader(endianness=Endian.BIG) as br_internal:
             br_internal.write_struct(BrNut(), self.nuccChunk.nut)
+            print(f"nut size: {br_internal.size()}")
 
             # Write the nut size
             br.write_uint32(br_internal.size())

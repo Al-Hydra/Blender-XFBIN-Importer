@@ -1,10 +1,12 @@
+#![feature(portable_simd)]
+
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use rayon::prelude::*;
 use std::sync::Arc;
-use intel_tex_2::{bc1, bc3, bc4, bc5, bc6h, bc7, RgbaSurface, RSurface, RgSurface};
-use intel_tex_2::bc6h::EncodeSettings as BC6Settings;
-use intel_tex_2::bc7::EncodeSettings as BC7Settings;
+use std::simd::{i32x4, u32x4, f32x4};
+use std::simd::num::{SimdFloat, SimdInt};
+use std::simd::cmp::SimdPartialEq;
 
 /// Convert RGB -> RGB565
 fn rgb_to_565(r: u8, g: u8, b: u8) -> u16 {
@@ -19,24 +21,45 @@ fn unpack_565(c: u16) -> (u8, u8, u8) {
 }
 
 /// Compute principal axis (3-vector) using power iteration on covariance of colors.
-/// Input: list of RGB triples as f32 (0..255)
+/// Input: list of RGB triples as f32 (0..255) - SIMD optimized
 fn principal_axis_rgb(colors: &[(f32, f32, f32)]) -> (f32, f32, f32) {
     let n = colors.len() as f32;
     if colors.is_empty() { return (1.0, 0.0, 0.0); }
 
-    // mean
-    let mut mx = 0.0f32;
-    let mut my = 0.0f32;
-    let mut mz = 0.0f32;
-    for &(x,y,z) in colors { mx += x; my += y; mz += z; }
+    // SIMD-accelerated mean computation
+    let mut sum = f32x4::splat(0.0);
+    let chunks = colors.chunks_exact(4);
+    let remainder = chunks.remainder();
+    
+    for chunk in chunks {
+        let r = f32x4::from_array([chunk[0].0, chunk[1].0, chunk[2].0, chunk[3].0]);
+        let g = f32x4::from_array([chunk[0].1, chunk[1].1, chunk[2].1, chunk[3].1]);
+        let b = f32x4::from_array([chunk[0].2, chunk[1].2, chunk[2].2, chunk[3].2]);
+        sum += f32x4::from_array([r.reduce_sum(), g.reduce_sum(), b.reduce_sum(), 0.0]);
+    }
+    
+    let mut mx = sum.as_array()[0];
+    let mut my = sum.as_array()[1];
+    let mut mz = sum.as_array()[2];
+    
+    // Handle remainder
+    for &(x,y,z) in remainder {
+        mx += x; my += y; mz += z;
+    }
     mx /= n; my /= n; mz /= n;
 
-    // compute covariance matrix (3x3)
+    // compute covariance matrix (3x3) - SIMD optimized
+    let mean = f32x4::from_array([mx, my, mz, 0.0]);
     let mut cxx = 0.0f32; let mut cxy = 0.0f32; let mut cxz = 0.0f32;
     let mut cyy = 0.0f32; let mut cyz = 0.0f32; let mut czz = 0.0f32;
 
     for &(x,y,z) in colors {
-        let rx = x - mx; let ry = y - my; let rz = z - mz;
+        let v = f32x4::from_array([x, y, z, 0.0]);
+        let r = v - mean;
+        let rx = r.as_array()[0];
+        let ry = r.as_array()[1];
+        let rz = r.as_array()[2];
+        
         cxx += rx * rx;
         cxy += rx * ry;
         cxz += rx * rz;
@@ -46,46 +69,108 @@ fn principal_axis_rgb(colors: &[(f32, f32, f32)]) -> (f32, f32, f32) {
     }
 
     // power iteration: start with luminance-weighted vector for better convergence
-    let mut vx = 0.3f32; let mut vy = 0.59f32; let mut vz = 0.11f32;
+    let mut v = f32x4::from_array([0.3f32, 0.59f32, 0.11f32, 0.0]);
     for _ in 0..16 {
         // multiply cov * v
+        let vx = v.as_array()[0];
+        let vy = v.as_array()[1];
+        let vz = v.as_array()[2];
+        
         let nx = cxx * vx + cxy * vy + cxz * vz;
         let ny = cxy * vx + cyy * vy + cyz * vz;
         let nz = cxz * vx + cyz * vy + czz * vz;
-        let norm = (nx*nx + ny*ny + nz*nz).sqrt();
-        if norm < 1e-10 { break; } // converged or degenerate
-        let new_vx = nx / norm;
-        let new_vy = ny / norm;
-        let new_vz = nz / norm;
-        // Check convergence
-        let diff = (new_vx - vx).abs() + (new_vy - vy).abs() + (new_vz - vz).abs();
-        vx = new_vx; vy = new_vy; vz = new_vz;
-        if diff < 0.001 { break; } // converged
+        
+        let norm_sq = nx*nx + ny*ny + nz*nz;
+        if norm_sq < 1e-20 { break; }
+        let norm = norm_sq.sqrt();
+        
+        let new_v = f32x4::from_array([nx / norm, ny / norm, nz / norm, 0.0]);
+        
+        // Check convergence with SIMD
+        let diff = (new_v - v).abs();
+        let diff_sum = diff.as_array()[0] + diff.as_array()[1] + diff.as_array()[2];
+        v = new_v;
+        if diff_sum < 0.001 { break; }
     }
-    (vx, vy, vz)
+    (v.as_array()[0], v.as_array()[1], v.as_array()[2])
 }
 
 /// choose color endpoints via PCA projection and quantize to 565
 fn choose_color_endpoints(block: &[[u8;4];16]) -> (u16,u16) {
     // collect rgb floats
-    let mut cols = Vec::with_capacity(16);
-    for p in block {
-        cols.push((p[0] as f32, p[1] as f32, p[2] as f32));
-    }
-
-    // Method 1: PCA-based
+    let cols: Vec<(f32, f32, f32)> = block.iter().map(|p| (p[0] as f32, p[1] as f32, p[2] as f32)).collect();
+    let n = cols.len();
+    // Method 1: PCA-based with inset optimization (NVTT3-style)
     let (ax, ay, az) = principal_axis_rgb(&cols);
-    let mut min_proj = f32::INFINITY; let mut max_proj = f32::NEG_INFINITY;
-    let mut min_col = (0u8,0u8,0u8); let mut max_col = (0u8,0u8,0u8);
-
-    for &(r,g,b) in &cols {
-        let proj = r*ax + g*ay + b*az;
-        if proj < min_proj { min_proj = proj; min_col = (r as u8, g as u8, b as u8); }
-        if proj > max_proj { max_proj = proj; max_col = (r as u8, g as u8, b as u8); }
+    let mut min_proj = f32::INFINITY;
+    let mut max_proj = f32::NEG_INFINITY;
+    let mut min_col = (0u8,0u8,0u8);
+    let mut max_col = (0u8,0u8,0u8);
+    let mut min_proj_idx = 0;
+    let mut max_proj_idx = 0;
+    // SIMD vectorization for PCA projection
+    let mut proj_arr = [0.0f32; 16];
+    for i in (0..n).step_by(4) {
+        let r = f32x4::from_array([
+            cols.get(i).map_or(0.0, |c| c.0),
+            cols.get(i+1).map_or(0.0, |c| c.0),
+            cols.get(i+2).map_or(0.0, |c| c.0),
+            cols.get(i+3).map_or(0.0, |c| c.0),
+        ]);
+        let g = f32x4::from_array([
+            cols.get(i).map_or(0.0, |c| c.1),
+            cols.get(i+1).map_or(0.0, |c| c.1),
+            cols.get(i+2).map_or(0.0, |c| c.1),
+            cols.get(i+3).map_or(0.0, |c| c.1),
+        ]);
+        let b = f32x4::from_array([
+            cols.get(i).map_or(0.0, |c| c.2),
+            cols.get(i+1).map_or(0.0, |c| c.2),
+            cols.get(i+2).map_or(0.0, |c| c.2),
+            cols.get(i+3).map_or(0.0, |c| c.2),
+        ]);
+        let proj = r * f32x4::splat(ax) + g * f32x4::splat(ay) + b * f32x4::splat(az);
+        let arr = proj.as_array();
+        for j in 0..4 {
+            let idx = i + j;
+            if idx < n {
+                proj_arr[idx] = arr[j];
+                if arr[j] < min_proj {
+                    min_proj = arr[j];
+                    min_proj_idx = idx;
+                }
+                if arr[j] > max_proj {
+                    max_proj = arr[j];
+                    max_proj_idx = idx;
+                }
+            }
+        }
+    }
+    min_col = (cols[min_proj_idx].0 as u8, cols[min_proj_idx].1 as u8, cols[min_proj_idx].2 as u8);
+    max_col = (cols[max_proj_idx].0 as u8, cols[max_proj_idx].1 as u8, cols[max_proj_idx].2 as u8);
+    // NVTT3-style inset: move endpoints inward along principal axis
+    let inset_shift = (max_proj - min_proj) / 16.0;
+    if inset_shift > 0.0 {
+        min_proj += inset_shift;
+        max_proj -= inset_shift;
+        let mut best_min_err = f32::INFINITY;
+        let mut best_max_err = f32::INFINITY;
+        for i in 0..n {
+            let proj = proj_arr[i];
+            let min_err = (proj - min_proj).abs();
+            if min_err < best_min_err {
+                best_min_err = min_err;
+                min_col = (cols[i].0 as u8, cols[i].1 as u8, cols[i].2 as u8);
+            }
+            let max_err = (proj - max_proj).abs();
+            if max_err < best_max_err {
+                best_max_err = max_err;
+                max_col = (cols[i].0 as u8, cols[i].1 as u8, cols[i].2 as u8);
+            }
+        }
     }
     let pca_c0 = rgb_to_565(max_col.0, max_col.1, max_col.2);
     let pca_c1 = rgb_to_565(min_col.0, min_col.1, min_col.2);
-
     // Method 2: Bounding box (min/max per channel)
     let mut min_r = 255u8; let mut max_r = 0u8;
     let mut min_g = 255u8; let mut max_g = 0u8;
@@ -98,23 +183,52 @@ fn choose_color_endpoints(block: &[[u8;4];16]) -> (u16,u16) {
     }
     let bbox_c0 = rgb_to_565(max_r, max_g, max_b);
     let bbox_c1 = rgb_to_565(min_r, min_g, min_b);
-
-    // Method 3: Luminance-based extremes
+    // Method 3: Luminance-based extremes (SIMD)
     let mut min_lum = f32::INFINITY; let mut max_lum = f32::NEG_INFINITY;
-    let mut min_lum_col = (0u8,0u8,0u8); let mut max_lum_col = (0u8,0u8,0u8);
-    for &(r,g,b) in &cols {
-        let lum = r*0.3 + g*0.59 + b*0.11;
-        if lum < min_lum { min_lum = lum; min_lum_col = (r as u8, g as u8, b as u8); }
-        if lum > max_lum { max_lum = lum; max_lum_col = (r as u8, g as u8, b as u8); }
+    let mut min_lum_idx = 0; let mut max_lum_idx = 0;
+    for i in (0..n).step_by(4) {
+        let r = f32x4::from_array([
+            cols.get(i).map_or(0.0, |c| c.0),
+            cols.get(i+1).map_or(0.0, |c| c.0),
+            cols.get(i+2).map_or(0.0, |c| c.0),
+            cols.get(i+3).map_or(0.0, |c| c.0),
+        ]);
+        let g = f32x4::from_array([
+            cols.get(i).map_or(0.0, |c| c.1),
+            cols.get(i+1).map_or(0.0, |c| c.1),
+            cols.get(i+2).map_or(0.0, |c| c.1),
+            cols.get(i+3).map_or(0.0, |c| c.1),
+        ]);
+        let b = f32x4::from_array([
+            cols.get(i).map_or(0.0, |c| c.2),
+            cols.get(i+1).map_or(0.0, |c| c.2),
+            cols.get(i+2).map_or(0.0, |c| c.2),
+            cols.get(i+3).map_or(0.0, |c| c.2),
+        ]);
+        let lum = r * f32x4::splat(0.3) + g * f32x4::splat(0.59) + b * f32x4::splat(0.11);
+        let arr = lum.as_array();
+        for j in 0..4 {
+            let idx = i + j;
+            if idx < n {
+                if arr[j] < min_lum {
+                    min_lum = arr[j];
+                    min_lum_idx = idx;
+                }
+                if arr[j] > max_lum {
+                    max_lum = arr[j];
+                    max_lum_idx = idx;
+                }
+            }
+        }
     }
+    let min_lum_col = (cols[min_lum_idx].0 as u8, cols[min_lum_idx].1 as u8, cols[min_lum_idx].2 as u8);
+    let max_lum_col = (cols[max_lum_idx].0 as u8, cols[max_lum_idx].1 as u8, cols[max_lum_idx].2 as u8);
     let lum_c0 = rgb_to_565(max_lum_col.0, max_lum_col.1, max_lum_col.2);
     let lum_c1 = rgb_to_565(min_lum_col.0, min_lum_col.1, min_lum_col.2);
-
     // Test all three methods and pick the best
     let candidates = [(pca_c0, pca_c1), (bbox_c0, bbox_c1), (lum_c0, lum_c1)];
     let mut best = candidates[0];
     let mut best_err = total_block_error(block, best.0, best.1);
-    
     for &(c0, c1) in &candidates[1..] {
         let err = total_block_error(block, c0, c1);
         if err < best_err {
@@ -122,10 +236,8 @@ fn choose_color_endpoints(block: &[[u8;4];16]) -> (u16,u16) {
             best = (c0, c1);
         }
     }
-
     let mut c0 = best.0;
     let mut c1 = best.1;
-
     // Heuristic: if endpoints are equal after quantize, perturb slightly
     if c0 == c1 {
         let (r0,g0,b0) = max_col;
@@ -135,7 +247,6 @@ fn choose_color_endpoints(block: &[[u8;4];16]) -> (u16,u16) {
         else if b0 != 255 { c0 = rgb_to_565(r0, g0, b0+1); }
         else if r1 != 0 { c1 = rgb_to_565(r1-1, g1, b1); }
     }
-
     (c0, c1)
 }
 
@@ -172,44 +283,104 @@ fn palette_from_endpoints(c0: u16, c1: u16) -> [(u8,u8,u8,u8);4] {
     palette
 }
 
-/// pack 16 2-bit indices (LSB first per pixel index) into u32 with perceptual weighting
+/// pack 16 2-bit indices (LSB first per pixel index) into u32 with perceptual weighting - SIMD optimized
 fn choose_color_indices(block: &[[u8;4];16], palette: &[(u8,u8,u8,u8);4]) -> u32 {
     let mut bits = 0u32;
+    
+    // Precompute palette in SIMD-friendly format
+    let pal_r = i32x4::from_array([palette[0].0 as i32, palette[1].0 as i32, palette[2].0 as i32, palette[3].0 as i32]);
+    let pal_g = i32x4::from_array([palette[0].1 as i32, palette[1].1 as i32, palette[2].1 as i32, palette[3].1 as i32]);
+    let pal_b = i32x4::from_array([palette[0].2 as i32, palette[1].2 as i32, palette[2].2 as i32, palette[3].2 as i32]);
+    let pal_a = u32x4::from_array([palette[0].3 as u32, palette[1].3 as u32, palette[2].3 as u32, palette[3].3 as u32]);
+    
+    const WEIGHT_R: i32 = 30;
+    const WEIGHT_G: i32 = 59;
+    const WEIGHT_B: i32 = 11;
+    let weight_r = i32x4::splat(WEIGHT_R);
+    let weight_g = i32x4::splat(WEIGHT_G);
+    let weight_b = i32x4::splat(WEIGHT_B);
+    
     for i in 0..16 {
         let px = block[i];
+        let px_r = i32x4::splat(px[0] as i32);
+        let px_g = i32x4::splat(px[1] as i32);
+        let px_b = i32x4::splat(px[2] as i32);
+        
+        // Calculate differences for all 4 palette entries at once
+        let dr = px_r - pal_r;
+        let dg = px_g - pal_g;
+        let db = px_b - pal_b;
+        
+        // Perceptual error calculation
+        let err = (dr * dr * weight_r + dg * dg * weight_g + db * db * weight_b).cast::<u32>();
+        
+        // Handle transparent preference
+        let err_adjusted = if px[3] < 128 {
+            let transparent_mask = pal_a.simd_eq(u32x4::splat(0));
+            transparent_mask.select(u32x4::splat(0), err)
+        } else {
+            err
+        };
+        
+        // Find minimum error index
+        let err_array = err_adjusted.as_array();
         let mut best = 0usize;
-        let mut best_err = u32::MAX;
-        for j in 0..4 {
-            let (pr,pg,pb,pa) = palette[j];
-            // if palette has transparent entry (pa==0) and pixel alpha <128, bias to it
-            let dr = px[0] as i32 - pr as i32;
-            let dg = px[1] as i32 - pg as i32;
-            let db = px[2] as i32 - pb as i32;
-            // Perceptual weights: 0.3R + 0.59G + 0.11B (scaled by 100 to avoid floats)
-            let mut err = (dr*dr*30 + dg*dg*59 + db*db*11) as u32;
-            if pa == 0 && px[3] < 128 { err = 0; } // prefer transparent match
-            if err < best_err { best_err = err; best = j; }
+        let mut best_err = err_array[0];
+        for j in 1..4 {
+            if err_array[j] < best_err {
+                best_err = err_array[j];
+                best = j;
+            }
         }
         bits |= (best as u32) << (i * 2);
     }
     bits
 }
 
-/// Calculate total perceptual error for a block given endpoints
+/// Calculate total perceptual error for a block given endpoints - SIMD optimized
 #[inline]
 fn total_block_error(block: &[[u8;4];16], c0: u16, c1: u16) -> u32 {
     let palette = palette_from_endpoints(c0, c1);
+    
+    // Precompute palette in SIMD-friendly format
+    let pal_r = i32x4::from_array([palette[0].0 as i32, palette[1].0 as i32, palette[2].0 as i32, palette[3].0 as i32]);
+    let pal_g = i32x4::from_array([palette[0].1 as i32, palette[1].1 as i32, palette[2].1 as i32, palette[3].1 as i32]);
+    let pal_b = i32x4::from_array([palette[0].2 as i32, palette[1].2 as i32, palette[2].2 as i32, palette[3].2 as i32]);
+    let pal_a = u32x4::from_array([palette[0].3 as u32, palette[1].3 as u32, palette[2].3 as u32, palette[3].3 as u32]);
+    
+    const WEIGHT_R: i32 = 30;
+    const WEIGHT_G: i32 = 59;
+    const WEIGHT_B: i32 = 11;
+    let weight_r = i32x4::splat(WEIGHT_R);
+    let weight_g = i32x4::splat(WEIGHT_G);
+    let weight_b = i32x4::splat(WEIGHT_B);
+    
     let mut total_err = 0u32;
+    
     for px in block {
-        let mut best_err = u32::MAX;
-        for &(pr,pg,pb,pa) in &palette {
-            let dr = px[0] as i32 - pr as i32;
-            let dg = px[1] as i32 - pg as i32;
-            let db = px[2] as i32 - pb as i32;
-            let mut err = (dr*dr*30 + dg*dg*59 + db*db*11) as u32;
-            if pa == 0 && px[3] < 128 { err = 0; }
-            best_err = best_err.min(err);
-        }
+        let px_r = i32x4::splat(px[0] as i32);
+        let px_g = i32x4::splat(px[1] as i32);
+        let px_b = i32x4::splat(px[2] as i32);
+        
+        // Calculate differences for all 4 palette entries at once
+        let dr = px_r - pal_r;
+        let dg = px_g - pal_g;
+        let db = px_b - pal_b;
+        
+        // Perceptual error calculation
+        let err = (dr * dr * weight_r + dg * dg * weight_g + db * db * weight_b).cast::<u32>();
+        
+        // Handle transparent preference
+        let err_adjusted = if px[3] < 128 {
+            let transparent_mask = pal_a.simd_eq(u32x4::splat(0));
+            transparent_mask.select(u32x4::splat(0), err)
+        } else {
+            err
+        };
+        
+        // Find minimum error
+        let err_array = err_adjusted.as_array();
+        let best_err = err_array[0].min(err_array[1]).min(err_array[2]).min(err_array[3]);
         total_err += best_err;
     }
     total_err
@@ -229,7 +400,7 @@ fn adjust_565(c: u16, dr: i32, dg: i32, db: i32) -> u16 {
     (new_r << 11) | (new_g << 5) | new_b
 }
 
-/// Refine endpoints by testing small adjustments - optimized with independent refinement and two passes
+/// Refine endpoints by testing small adjustments - NVTT3-style with larger search and better convergence
 fn refine_endpoints(block: &[[u8;4];16], c0: u16, c1: u16) -> (u16, u16) {
     let mut best_c0 = c0;
     let mut best_c1 = c1;
@@ -238,10 +409,13 @@ fn refine_endpoints(block: &[[u8;4];16], c0: u16, c1: u16) -> (u16, u16) {
     // Early exit if error is already very small
     if best_err < 16 { return (best_c0, best_c1); }
     
-    // Pass 1: Refine c0 while keeping c1 fixed
-    for dr in -1i32..=1 {
-        for dg in -1i32..=1 {
-            for db in -1i32..=1 {
+    // NVTT3 uses iterative refinement with larger search radius
+    // Multiple passes with decreasing search radius for better convergence
+    
+    // Pass 1: Large search radius (±2)
+    for dr in -2i32..=2 {
+        for dg in -2i32..=2 {
+            for db in -2i32..=2 {
                 if dr == 0 && dg == 0 && db == 0 { continue; }
                 let new_c0 = adjust_565(c0, dr, dg, db);
                 let err = total_block_error(block, new_c0, best_c1);
@@ -253,10 +427,9 @@ fn refine_endpoints(block: &[[u8;4];16], c0: u16, c1: u16) -> (u16, u16) {
         }
     }
     
-    // Pass 1: Refine c1 with the improved c0
-    for dr in -1i32..=1 {
-        for dg in -1i32..=1 {
-            for db in -1i32..=1 {
+    for dr in -2i32..=2 {
+        for dg in -2i32..=2 {
+            for db in -2i32..=2 {
                 if dr == 0 && dg == 0 && db == 0 { continue; }
                 let new_c1 = adjust_565(c1, dr, dg, db);
                 let err = total_block_error(block, best_c0, new_c1);
@@ -268,8 +441,7 @@ fn refine_endpoints(block: &[[u8;4];16], c0: u16, c1: u16) -> (u16, u16) {
         }
     }
     
-    // Pass 2: One more refinement pass with the improved endpoints
-    // This catches cases where greedy approach missed better combinations
+    // Pass 2: Fine-tune with small radius (±1) from improved endpoints
     let pass1_c0 = best_c0;
     let pass1_c1 = best_c1;
     
@@ -301,25 +473,49 @@ fn refine_endpoints(block: &[[u8;4];16], c0: u16, c1: u16) -> (u16, u16) {
         }
     }
     
+    // Pass 3: Joint optimization - test both endpoints together for final refinement
+    let pass2_c0 = best_c0;
+    let pass2_c1 = best_c1;
+    
+    for dr0 in -1i32..=1 {
+        for dg0 in -1i32..=1 {
+            for db0 in -1i32..=1 {
+                for dr1 in -1i32..=1 {
+                    for dg1 in -1i32..=1 {
+                        for db1 in -1i32..=1 {
+                            if (dr0 == 0 && dg0 == 0 && db0 == 0) && (dr1 == 0 && dg1 == 0 && db1 == 0) { continue; }
+                            let new_c0 = adjust_565(pass2_c0, dr0, dg0, db0);
+                            let new_c1 = adjust_565(pass2_c1, dr1, dg1, db1);
+                            let err = total_block_error(block, new_c0, new_c1);
+                            if err < best_err {
+                                best_err = err;
+                                best_c0 = new_c0;
+                                best_c1 = new_c1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     (best_c0, best_c1)
 }
 
 /// compress one block into DXT1 (8 bytes)
 fn compress_block_dxt1(block: &[[u8;4];16]) -> [u8;8] {
     let (mut c0, mut c1) = choose_color_endpoints(block);
-    
     // Refine endpoints for better quality
-    (c0, c1) = refine_endpoints(block, c0, c1);
-
+    let (rc0, rc1) = refine_endpoints(block, c0, c1);
+    c0 = rc0;
+    c1 = rc1;
     // If any pixel alpha < 128, ensure we pick the 1-bit alpha mode if beneficial.
     let any_transparent = block.iter().any(|p| p[3] < 128);
     if any_transparent && c0 > c1 {
         std::mem::swap(&mut c0, &mut c1);
     }
-
     let palette = palette_from_endpoints(c0, c1);
     let idx_bits = choose_color_indices(block, &palette);
-
     let mut out = [0u8;8];
     out[0] = (c0 & 0xFF) as u8;
     out[1] = (c0 >> 8) as u8;
@@ -356,8 +552,7 @@ fn pack_dxt3_alpha(block: &[[u8;4];16]) -> [u8;8] {
 /// Returns (alpha0, alpha1, 48-bit packed indices as u64 (lower 48 bits contain 3-bit indices packed)).
 fn compress_block_dxt5_alpha(block: &[[u8;4];16]) -> (u8,u8,u64) {
     // Gather alphas and sort for percentile selection
-    let alphas: Vec<u8> = block.iter().map(|p| p[3]).collect();
-    let mut sorted_alphas = alphas.clone();
+    let mut sorted_alphas: Vec<u8> = block.iter().map(|p| p[3]).collect();
     sorted_alphas.sort_unstable();
     
     // Use percentiles instead of hard min/max to avoid outliers
@@ -435,37 +630,6 @@ fn read_block_clamp(rgba: &[u8], width: usize, height: usize, bx: usize, by: usi
     out
 }
 
-/// Top-level compressor for DXT1
-#[pyfunction]
-fn compress_dxt1(py: Python<'_>, rgba: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
-    if rgba.len() != width * height * 4 {
-        return Err(pyo3::exceptions::PyValueError::new_err("Invalid RGBA size"));
-    }
-    let blocks_x = (width + 3) / 4;
-    let blocks_y = (height + 3) / 4;
-    let total = blocks_x * blocks_y;
-    
-    let rgba = Arc::new(rgba);
-    // Release GIL while doing CPU work in parallel
-    let out = py.allow_threads(|| {
-        // Process blocks in parallel
-        let blocks: Vec<[u8;8]> = (0..total).into_par_iter().map(|i| {
-            let bx = (i % blocks_x) * 4;
-            let by = (i / blocks_x) * 4;
-            let block = read_block_clamp(&rgba, width, height, bx, by);
-            compress_block_dxt1(&block)
-        }).collect();
-        
-        // Flatten into output buffer
-        let mut out = Vec::with_capacity(total * 8);
-        for b in blocks {
-            out.extend_from_slice(&b);
-        }
-        out
-    });
-    
-    Ok(PyBytes::new(py, &out).into())
-}
 
 /// Top-level compressor for DXT3 (alpha explicit 4-bit + DXT1 color)
 #[pyfunction]
@@ -544,160 +708,9 @@ fn compress_dxt5(py: Python<'_>, rgba: Vec<u8>, width: usize, height: usize) -> 
     Ok(PyBytes::new(py, &out).into())
 }
 
-/// Intel BC1 compressor (same as DXT1)
+/// Decompress DXT1 to RGBA
 #[pyfunction]
-fn compress_bc1_intel(py: Python<'_>, rgba: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
-    if rgba.len() != width * height * 4 {
-        return Err(pyo3::exceptions::PyValueError::new_err("Invalid RGBA size"));
-    }
-    
-    let out = py.allow_threads(|| {
-        let surface = RgbaSurface {
-            width: width as u32,
-            height: height as u32,
-            stride: width as u32 * 4,
-            data: &rgba,
-        };
-        bc1::compress_blocks(&surface)
-    });
-    
-    Ok(PyBytes::new(py, &out).into())
-}
-
-/// Intel BC3 compressor (same as DXT5)
-#[pyfunction]
-fn compress_bc3_intel(py: Python<'_>, rgba: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
-    if rgba.len() != width * height * 4 {
-        return Err(pyo3::exceptions::PyValueError::new_err("Invalid RGBA size"));
-    }
-    
-    let out = py.allow_threads(|| {
-        let surface = RgbaSurface {
-            width: width as u32,
-            height: height as u32,
-            stride: width as u32 * 4,
-            data: &rgba,
-        };
-        bc3::compress_blocks(&surface)
-    });
-    
-    Ok(PyBytes::new(py, &out).into())
-}
-
-/// Intel BC4 compressor (single channel, grayscale)
-#[pyfunction]
-fn compress_bc4_intel(py: Python<'_>, rgba: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
-    if rgba.len() != width * height * 4 {
-        return Err(pyo3::exceptions::PyValueError::new_err("Invalid RGBA size"));
-    }
-    
-    let out = py.allow_threads(|| {
-        // Extract R channel only for BC4
-        let mut r_data = Vec::with_capacity(width * height);
-        for i in 0..width*height {
-            r_data.push(rgba[i*4]); // Red channel
-        }
-        
-        let surface = RSurface {
-            width: width as u32,
-            height: height as u32,
-            stride: width as u32,
-            data: &r_data,
-        };
-        bc4::compress_blocks(&surface)
-    });
-    
-    Ok(PyBytes::new(py, &out).into())
-}
-
-/// Intel BC5 compressor (two channel, normal maps)
-#[pyfunction]
-fn compress_bc5_intel(py: Python<'_>, rgba: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
-    if rgba.len() != width * height * 4 {
-        return Err(pyo3::exceptions::PyValueError::new_err("Invalid RGBA size"));
-    }
-    
-    let out = py.allow_threads(|| {
-        // Extract RG channels for BC5
-        let mut rg_data = Vec::with_capacity(width * height * 2);
-        for i in 0..width*height {
-            rg_data.push(rgba[i*4]);     // Red channel
-            rg_data.push(rgba[i*4 + 1]); // Green channel
-        }
-        
-        let surface = RgSurface {
-            width: width as u32,
-            height: height as u32,
-            stride: width as u32 * 2,
-            data: &rg_data,
-        };
-        bc5::compress_blocks(&surface)
-    });
-    
-    Ok(PyBytes::new(py, &out).into())
-}
-
-/// Intel BC6H compressor (HDR RGB)
-#[pyfunction]
-fn compress_bc6h_intel(py: Python<'_>, rgba: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
-    if rgba.len() != width * height * 4 {
-        return Err(pyo3::exceptions::PyValueError::new_err("Invalid RGBA size"));
-    }
-    
-    let out = py.allow_threads(|| {
-        let surface = RgbaSurface {
-            width: width as u32,
-            height: height as u32,
-            stride: width as u32 * 4,
-            data: &rgba,
-        };
-        let settings = BC6Settings {
-            slow_mode: true,
-            fast_mode: false,
-            refine_iterations_1p: 2,
-            refine_iterations_2p: 2,
-            fast_skip_threshold: 0,
-        };
-        bc6h::compress_blocks(&settings, &surface)
-    });
-    
-    Ok(PyBytes::new(py, &out).into())
-}
-
-/// Intel BC7 compressor (highest quality RGBA)
-#[pyfunction]
-fn compress_bc7_intel(py: Python<'_>, rgba: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
-    if rgba.len() != width * height * 4 {
-        return Err(pyo3::exceptions::PyValueError::new_err("Invalid RGBA size"));
-    }
-    
-    let out = py.allow_threads(|| {
-        let surface = RgbaSurface {
-            width: width as u32,
-            height: height as u32,
-            stride: width as u32 * 4,
-            data: &rgba,
-        };
-        let settings = BC7Settings {
-            mode_selection: [true, true, true, true],
-            refine_iterations: [2, 2, 2, 2, 2, 2, 2, 2],
-            skip_mode2: false,
-            fast_skip_threshold_mode1: 0,
-            fast_skip_threshold_mode3: 0,
-            fast_skip_threshold_mode7: 0,
-            mode45_channel0: 0,
-            refine_iterations_channel: 2,
-            channels: 4,
-        };
-        bc7::compress_blocks(&settings, &surface)
-    });
-    
-    Ok(PyBytes::new(py, &out).into())
-}
-
-/// Decompress BC1/DXT1 to RGBA
-#[pyfunction]
-fn decompress_bc1_intel(py: Python<'_>, data: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
+fn decompress_dxt1(py: Python<'_>, data: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
     let out = py.allow_threads(|| {
         decompress_bc1_blocks(&data, width, height)
     });
@@ -715,31 +728,11 @@ fn decompress_dxt3(py: Python<'_>, data: Vec<u8>, width: usize, height: usize) -
     Ok(PyBytes::new(py, &out).into())
 }
 
-/// Decompress BC3/DXT5 to RGBA
+/// Decompress DXT5 to RGBA
 #[pyfunction]
-fn decompress_bc3_intel(py: Python<'_>, data: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
+fn decompress_dxt5(py: Python<'_>, data: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
     let out = py.allow_threads(|| {
         decompress_bc3_blocks(&data, width, height)
-    });
-    
-    Ok(PyBytes::new(py, &out).into())
-}
-
-/// Decompress BC4 to RGBA (grayscale in RGB, alpha=255)
-#[pyfunction]
-fn decompress_bc4_intel(py: Python<'_>, data: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
-    let out = py.allow_threads(|| {
-        decompress_bc4_blocks(&data, width, height)
-    });
-    
-    Ok(PyBytes::new(py, &out).into())
-}
-
-/// Decompress BC5 to RGBA (RG in RG channels, B=0, A=255)
-#[pyfunction]
-fn decompress_bc5_intel(py: Python<'_>, data: Vec<u8>, width: usize, height: usize) -> PyResult<PyObject> {
-    let out = py.allow_threads(|| {
-        decompress_bc5_blocks(&data, width, height)
     });
     
     Ok(PyBytes::new(py, &out).into())
@@ -905,71 +898,6 @@ fn decompress_bc3_blocks(data: &[u8], width: usize, height: usize) -> Vec<u8> {
     rgba
 }
 
-/// Decompress BC4 blocks to RGBA (grayscale)
-fn decompress_bc4_blocks(data: &[u8], width: usize, height: usize) -> Vec<u8> {
-    let blocks_x = (width + 3) / 4;
-    let blocks_y = (height + 3) / 4;
-    let mut rgba = vec![0u8; width * height * 4];
-    
-    for by in 0..blocks_y {
-        for bx in 0..blocks_x {
-            let block_idx = by * blocks_x + bx;
-            let block_data = &data[block_idx * 8..(block_idx + 1) * 8];
-            let values = decompress_bc3_alpha_block(block_data);
-            
-            for py in 0..4 {
-                for px in 0..4 {
-                    let x = bx * 4 + px;
-                    let y = by * 4 + py;
-                    if x < width && y < height {
-                        let dst_idx = (y * width + x) * 4;
-                        let src_idx = py * 4 + px;
-                        let v = values[src_idx];
-                        rgba[dst_idx] = v;
-                        rgba[dst_idx+1] = v;
-                        rgba[dst_idx+2] = v;
-                        rgba[dst_idx+3] = 255;
-                    }
-                }
-            }
-        }
-    }
-    rgba
-}
-
-/// Decompress BC5 blocks to RGBA (RG channels)
-fn decompress_bc5_blocks(data: &[u8], width: usize, height: usize) -> Vec<u8> {
-    let blocks_x = (width + 3) / 4;
-    let blocks_y = (height + 3) / 4;
-    let mut rgba = vec![0u8; width * height * 4];
-    
-    for by in 0..blocks_y {
-        for bx in 0..blocks_x {
-            let block_idx = by * blocks_x + bx;
-            let block_data = &data[block_idx * 16..(block_idx + 1) * 16];
-            
-            let r_values = decompress_bc3_alpha_block(&block_data[0..8]);
-            let g_values = decompress_bc3_alpha_block(&block_data[8..16]);
-            
-            for py in 0..4 {
-                for px in 0..4 {
-                    let x = bx * 4 + px;
-                    let y = by * 4 + py;
-                    if x < width && y < height {
-                        let dst_idx = (y * width + x) * 4;
-                        let src_idx = py * 4 + px;
-                        rgba[dst_idx] = r_values[src_idx];
-                        rgba[dst_idx+1] = g_values[src_idx];
-                        rgba[dst_idx+2] = 0;  // B channel (can be reconstructed for normal maps)
-                        rgba[dst_idx+3] = 255;
-                    }
-                }
-            }
-        }
-    }
-    rgba
-}
-
 /// Python module
 #[pymodule]
 fn blockCompressor(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -977,22 +905,9 @@ fn blockCompressor(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compress_dxt3, m)?)?;
     m.add_function(wrap_pyfunction!(compress_dxt5, m)?)?;
     
-    // DXT decompression
+    m.add_function(wrap_pyfunction!(decompress_dxt1, m)?)?;
     m.add_function(wrap_pyfunction!(decompress_dxt3, m)?)?;
-    
-    // Intel texture tools BC compression
-    m.add_function(wrap_pyfunction!(compress_bc1_intel, m)?)?;
-    m.add_function(wrap_pyfunction!(compress_bc3_intel, m)?)?;
-    m.add_function(wrap_pyfunction!(compress_bc4_intel, m)?)?;
-    m.add_function(wrap_pyfunction!(compress_bc5_intel, m)?)?;
-    m.add_function(wrap_pyfunction!(compress_bc6h_intel, m)?)?;
-    m.add_function(wrap_pyfunction!(compress_bc7_intel, m)?)?;
-    
-    // Intel texture tools BC decompression
-    m.add_function(wrap_pyfunction!(decompress_bc1_intel, m)?)?;
-    m.add_function(wrap_pyfunction!(decompress_bc3_intel, m)?)?;
-    m.add_function(wrap_pyfunction!(decompress_bc4_intel, m)?)?;
-    m.add_function(wrap_pyfunction!(decompress_bc5_intel, m)?)?;
+    m.add_function(wrap_pyfunction!(decompress_dxt5, m)?)?;
     
     Ok(())
 }

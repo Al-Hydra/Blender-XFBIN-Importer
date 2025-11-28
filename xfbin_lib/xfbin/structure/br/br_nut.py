@@ -96,6 +96,7 @@ class BrNutTexture(BrStruct):
 
     def __br_write__(self, br: 'BinaryReader', nutTex: 'NutTexture'):
         start = br.pos()
+        print(nutTex.total_size)
         br.write_uint32(nutTex.total_size)
         br.write_uint32(0)
 

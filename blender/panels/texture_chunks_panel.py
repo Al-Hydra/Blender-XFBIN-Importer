@@ -278,7 +278,7 @@ class NutTexturePropertyGroup(PropertyGroup):
 
     def init_data(self, nut_texture: NutTexture, tex_name, path = ''):
         self.name = tex_name
-        print(f'Initializing Nut Texture: {self.name}')
+        #print(f'Initializing Nut Texture: {self.name}')
         self.width = str(nut_texture.width)
         self.height = str(nut_texture.height)
         pixel_format = Pixel_Formats.get(nut_texture.pixel_format)

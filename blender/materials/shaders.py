@@ -2473,7 +2473,77 @@ def default_mat(self, mesh, xfbin_mat, mesh_flags, outline_hash, nodegrp = 'Defa
 				tex1.image = bpy.data.images.load(f'{path}/error64x64.dds')
 
 	return material
+
+
+def default_primitive(self, xfbin_mat, nodegrp = 'Primitive'):
+	bpy.context.scene.view_settings.view_transform = 'Standard'
+
+	material = bpy.data.materials.new(f'{xfbin_mat.name}')
+	if not xfbin_mat.texture_groups:
+		return material
+
+	material.use_nodes = True
+
+	#clear nodes
+	material.node_tree.nodes.clear()
+
+	#add nodes
+	#uv node
+	uv1 = material.node_tree.nodes.new('ShaderNodeUVMap')
+	uv1.location = Vector((-799.7762451171875, -745.7254028320312))
+	uv1.uv_map = 'UV_0'
 	
+	#mapping node
+	mapping1 = material.node_tree.nodes.new('ShaderNodeMapping')
+	mapping1.location = Vector((-523.52191162109375, -561.20159912109375))
+	mapping1.vector_type = 'TEXTURE'
+
+	#texture node
+	tex1 = material.node_tree.nodes.new('ShaderNodeTexImage')
+	tex1.location = Vector((-323.52191162109375, -261.20159912109375))
+	tex1.interpolation = 'Cubic'
+
+	#vertex color node
+	vcol = material.node_tree.nodes.new('ShaderNodeVertexColor')
+	vcol.location = Vector((-799.7762451171875, -745.7254028320312))
+
+	#mix node
+	mix = material.node_tree.nodes.new('ShaderNodeMixRGB')
+	mix.location = Vector((-99.7762451171875, -745.7254028320312))
+	mix.blend_type = 'MULTIPLY'
+	mix.inputs[0].default_value = 0.0
+
+	#principled node
+	principled = material.node_tree.nodes.new('ShaderNodeBsdfPrincipled')
+	principled.location = Vector((910.05126953125, -49.9783935546875))
+
+	#output node
+	output = material.node_tree.nodes.new('ShaderNodeOutputMaterial')
+	output.location = Vector((910.05126953125, -49.9783935546875))
+
+	#links
+	material.node_tree.links.new(uv1.outputs[0], mapping1.inputs[0])
+	material.node_tree.links.new(mapping1.outputs[0], tex1.inputs[0])
+	material.node_tree.links.new(tex1.outputs[0], mix.inputs[1])
+	material.node_tree.links.new(tex1.outputs[1], principled.inputs["Alpha"])
+	material.node_tree.links.new(vcol.outputs[0], mix.inputs[2])
+	material.node_tree.links.new(mix.outputs[0], principled.inputs[0])
+	material.node_tree.links.new(principled.outputs[0], output.inputs[0])
+
+	#set texture
+	if xfbin_mat.texture_groups and xfbin_mat.texture_groups[0].texture_chunks:
+		image_name = f'{xfbin_mat.texture_groups[0].texture_chunks[0].name}_0'
+		tex1.image = bpy.data.images.get(image_name)
+
+	if not tex1.image:
+			#load error64x64.dds
+			if bpy.data.images.get('error64x64.dds'):
+				tex1.image = bpy.data.images.get('error64x64.dds')
+			else:
+				tex1.image = bpy.data.images.load(f'{path}/error64x64.dds')
+
+	return material
+
 
 def F001(self, meshmat, xfbin_mat, matname, mesh, nodegrp = 'F001'):
 	bpy.context.scene.view_settings.view_transform = 'Standard'
@@ -2717,4 +2787,5 @@ shaders_dict = {'00 00 F0 00': F00A,
 				'00 07 F0 06': _07_F006,
 				'00 07 F0 0B': _07_F00B,
 				'00 00 E0 02': E002,
+				"primitive": default_primitive,
 				'default' : default_mat}
