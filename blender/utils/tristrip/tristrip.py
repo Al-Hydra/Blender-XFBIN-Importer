@@ -9,7 +9,7 @@ _rust_tristrip = None
 _USE_RUST = False
 
 try:
-    rust_lib_path = Path(__file__).parent / "tristrip_rust" / "target" / "release"
+    rust_lib_path = Path(__file__).parent / "tristrip_rust"# / "target" / "release"
     if rust_lib_path.exists():
         sys.path.insert(0, str(rust_lib_path))
         import tristrip_rust

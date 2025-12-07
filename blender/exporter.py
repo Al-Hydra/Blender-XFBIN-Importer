@@ -8,7 +8,7 @@ import time
 import bmesh
 import bpy
 from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProperty,
-                       StringProperty)
+                       IntProperty, StringProperty)
 from bpy.types import (Armature, EditBone, Mesh, MeshLoop, MeshLoopTriangle,
                        MeshVertex, Object, Operator)
 from bpy_extras.io_utils import ExportHelper
@@ -238,10 +238,12 @@ class ExportXfbin(Operator, ExportHelper):
         default=False,
     )
     
-    rounding_threshold: FloatProperty(
-        name='Rounding Threshold',
-        description='Threshold for rounding vertex attributes during export.',
-        default=0.0001,
+    rounding_digits: IntProperty(
+        name='Decimal Digits',
+        description='Number of decimal digits to round vertex attributes to (e.g., 4 = 0.0001 precision).',
+        default=4,
+        min=0,
+        max=10,
     )
     
     def draw(self, context):
@@ -268,6 +270,10 @@ class ExportXfbin(Operator, ExportHelper):
             
             layout.prop(self, 'high_precision_uvs')
             layout.prop(self, 'high_quality_colors')
+            
+            layout.prop(self, 'round_precision')
+            if self.round_precision:
+                layout.prop(self, 'rounding_digits')
             
             layout.prop(self, 'rename_content')
             if self.rename_content:
@@ -852,8 +858,9 @@ class XfbinExporter:
                 structured['bone_weights'][:] = (0, 0, 0, 1)
             
             # Deduplicate vertices
+            rounding_digits = self.rounding_digits if self.round_precision else 0
             unique_verts, unique_tri_indices, _ = dedupe_vertices_structured(
-                structured, loop_tri_indices, material_indices
+                structured, loop_tri_indices, material_indices, rounding_digits
             )
             
             # Now segment by material
@@ -1493,23 +1500,49 @@ def extract_loop_data_numpy(mesh_obj, mesh, coord_indices_dict, max_influences=4
     }
     
 
-def dedupe_vertices_structured(verts, tri_indices, material_indices):
+def dedupe_vertices_structured(verts, tri_indices, material_indices, rounding_digits=0):
     """
+    Deduplicate vertices by rounding floating-point attributes to a specified number of decimal digits.
+    
     verts: structured numpy array, shape (num_loops,)
     tri_indices: (num_tris, 3) int array referring to loop indices
     material_indices: (num_tris,) int array
+    rounding_digits: number of decimal digits to round to (0 = no rounding, exact match)
     """
-
-    raw = verts.view(np.void)  # shape (num_loops,)
-
+    
+    if rounding_digits <= 0:
+        # Use exact matching (no rounding)
+        raw = verts.view(np.void)
+        unique_raw, unique_index, inverse_map = np.unique(
+            raw, return_index=True, return_inverse=True
+        )
+        unique_verts = verts[unique_index]
+        unique_tris = inverse_map[tri_indices]
+        return unique_verts, unique_tris, material_indices
+    
+    # Round floating-point attributes to specified decimal digits
+    num_verts = len(verts)
+    if num_verts == 0:
+        return verts, tri_indices, material_indices
+    
+    # Create a copy of vertices with rounded float fields
+    rounded_verts = verts.copy()
+    
+    for name in verts.dtype.names:
+        field_dtype = verts.dtype.fields[name][0]
+        if np.issubdtype(field_dtype.base, np.floating):
+            rounded_verts[name] = np.round(verts[name], decimals=rounding_digits)
+    
+    # Use exact matching on rounded vertices
+    raw = rounded_verts.view(np.void)
     unique_raw, unique_index, inverse_map = np.unique(
         raw, return_index=True, return_inverse=True
     )
-
+    
+    # Return original (unrounded) unique vertices
     unique_verts = verts[unique_index]
-
     unique_tris = inverse_map[tri_indices]
-
+    
     return unique_verts, unique_tris, material_indices
 
 

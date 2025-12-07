@@ -491,11 +491,64 @@ class XfbinAnmChunkPropertyGroup(PropertyGroup):
     
 
 class AnmChunksListPropertyGroup(PropertyGroup):
+    
+    def play_anm(self, context):
+        anm_obj = context.object
+        anm_index = self.anm_chunk_index
+
+        if anm_index < 0 or anm_index >= len(self.anm_chunks):
+            return
+
+        chunk: XfbinAnmChunkPropertyGroup = self.anm_chunks[anm_index]
+
+        #set the scene frame range to the anm frame count
+        context.scene.frame_start = 0
+        context.scene.frame_end = chunk.frame_count
+        context.scene.frame_current = 0
+
+        action = bpy.data.actions.get(f'{chunk.anm_name}')
+        if not action:
+            return
+        
+        # reset all clumps' animation data
+        for obj in bpy.context.view_layer.objects:
+            if obj.type == "ARMATURE":
+                if obj.animation_data:
+                    obj.animation_data_clear()
+                    obj.data.animation_data_clear()
+                
+                # set all bones to rest pose
+                for bone in obj.pose.bones:
+                    bone.location = (0, 0, 0)
+                    bone.rotation_quaternion = (1, 0, 0, 0)
+                    bone.scale = (1, 1, 1)
+
+        #get all clumps
+        clumps = []
+        for clump in chunk.anm_clumps:
+            c = bpy.context.view_layer.objects.get(clump.name)
+            if c:
+                clumps.append(c)
+            else:
+                # look for referenced name
+                c = bpy.context.view_layer.objects.get(clump.ref_name)
+                if c:
+                    clumps.append(c)
+        
+        for clump in clumps:
+            clump.animation_data_create()
+            clump.animation_data.action = action
+            
+        #play the animation
+        if not context.screen.is_animation_playing:
+            bpy.ops.screen.animation_play()
+    
+    
     anm_chunks: CollectionProperty(
         type=XfbinAnmChunkPropertyGroup,
     )
 
-    anm_chunk_index: IntProperty()
+    anm_chunk_index: IntProperty(update= play_anm)
 
     def init_data(self, anm_chunks: List[NuccChunkAnm], cam_chunks: List[NuccChunkCamera], 
                 lightdirc_chunks: List[NuccChunkLightDirc], lightpoint_chunks: List[NuccChunkLightPoint], ambient_chunks: List[NuccChunkAmbient], context):
@@ -726,7 +779,6 @@ class PlayAnimation(bpy.types.Operator):
         return obj and obj.type == 'EMPTY' and obj.parent is None and obj.name.startswith(XFBIN_ANMS_OBJ)
     
     def execute(self, context):
-        #selected animation
         obj = context.object
         data: AnmChunksListPropertyGroup = obj.xfbin_anm_chunks_data
         anm_index = data.anm_chunk_index
@@ -736,25 +788,42 @@ class PlayAnimation(bpy.types.Operator):
             context.scene.frame_start = 0
             context.scene.frame_end = chunk.frame_count
             context.scene.frame_current = 0
+            action = bpy.data.actions.get(f'{chunk.name}')
+            if not action:
+                self.report({'WARNING'}, f'Action {chunk.name} not found')
+                return {'CANCELLED'}
 
+            
+        # reset all clumps' animation data
+        for obj in bpy.context.view_layer.objects:
+            if obj.type == "ARMATURE":
+                if obj.animation_data:
+                    obj.animation_data_clear()
+                    obj.data.animation_data_clear()
+                
+                # set all bones to rest pose
+                for bone in obj.pose.bones:
+                    bone.location = (0, 0, 0)
+                    bone.rotation_quaternion = (1, 0, 0, 0)
+                    bone.scale = (1, 1, 1)
+            
             #get all clumps
             clumps = []
             for clump in chunk.anm_clumps:
                 c = bpy.context.view_layer.objects.get(clump.name)
                 if c:
                     clumps.append(c)
+                else:
+                    # look for referenced name
+                    c = bpy.context.view_layer.objects.get(clump.ref_name)
+                    if c:
+                        clumps.append(c)
             #print(clumps)
 
             for clump in clumps:
-                #get action
-                #print(chunk.name)
-                action = bpy.data.actions.get(f'{chunk.name}')
-                #print(action)
-                if action:
-                    #set action
-                    clump.animation_data_create()
-                    clump.animation_data.action = action
-                    #play
+
+                clump.animation_data_create()
+                clump.animation_data.action = action
             
             #Check if no animation is playing
             if not context.screen.is_animation_playing:

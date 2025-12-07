@@ -238,7 +238,9 @@ class NuccChunkClump(NuccChunk):
         # Get the coord chunks
         self.coord_chunks: List[NuccChunkCoord] = list()
         for i in br_chunk.coordNodeIndices:
-            self.coord_chunks.append(chunk_list[chunk_indices[i]])
+            coord_chunk : NuccChunkCoord = chunk_list[chunk_indices[i]]
+            coord_chunk.clump = self
+            self.coord_chunks.append(coord_chunk)
 
         # Setup the coord node hierarchy
         self.root_nodes: List[CoordNode] = list()
@@ -659,8 +661,11 @@ class NuccChunkLightDirc(NuccChunk):
         self.has_props = False
         self.extension = '.lightdirc'
 
-        self.data = br_chunk.data
-
+        self.hash = br_chunk.hash
+        self.position = br_chunk.position
+        self.color = br_chunk.color
+        self.padding = br_chunk.padding
+        self.rotation = br_chunk.rotation
 
 class NuccChunkLightPoint(NuccChunk):
     def init_data(self, br_chunk: BrNuccChunkLightPoint, chunk_list: List['NuccChunk'], chunk_indices: List[int], chunk_refs: List, initial_chunks: List['NuccChunk']):

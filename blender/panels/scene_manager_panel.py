@@ -438,6 +438,7 @@ class XFBIN_Scene_OT_CreateLight(bpy.types.Operator):
         light_object = bpy.data.objects.new(name='Light Direction', object_data=None)
         light_object.empty_display_type = 'SINGLE_ARROW'
         light_object.empty_display_size = 2
+        #light_object.rotation_mode = 'QUATERNION'
         scene.collection.objects.link(light_object)
         xfbin_scene_manager.lightdir_object = light_object
 

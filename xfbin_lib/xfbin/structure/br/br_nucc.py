@@ -781,7 +781,11 @@ class BrNuccChunkLightDirc(BrNuccChunk):
     def init_data(self, br: BinaryReader):
         super().init_data(br)
 
-        self.data = br.read_bytes(64)
+        self.hash = br.read_uint32()
+        self.position = br.read_float32(3) #unused
+        self.color = br.read_float32(4)
+        self.padding = br.read_uint32(4)
+        self.rotation = br.read_float32(4) #quaternion
 
     
 class BrNuccChunkLightPoint(BrNuccChunk):

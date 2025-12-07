@@ -125,3 +125,6 @@ blender/read_test.py
 anm_converter.py
 *.blend1
 *.pyc
+
+
+blender/utils/tristrip/tristrip_rust/target/
