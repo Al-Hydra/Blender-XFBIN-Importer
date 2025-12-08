@@ -1438,7 +1438,7 @@ def _03_F00F(self, mesh, xfbin_mat, mesh_flags, outline_hash, shader_name = '3F0
 
 	material = bpy.data.materials.get(f'{shader_name}_Material')
 	if not material:
-		material_path = f'{path}/3F00F.blend'
+		material_path = f'{path}/XFBIN_Materials.blend'
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.materials = [f'{shader_name}_Material']
 		material = data_to.materials[0]

@@ -4,6 +4,91 @@ from bpy.props import (BoolProperty, CollectionProperty, FloatProperty, PointerP
 from bpy.types import Object, Panel, PropertyGroup
 
 
+class XFBIN_UL_SceneMaterials(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        row = layout.row(align=True)
+        if item.material:
+            row.label(text=item.material.name, icon='MATERIAL')
+        else:
+            row.label(text=item.name)
+        row.prop(item, 'material',emboss= True, text='', icon='MATERIAL')
+
+
+class XFBIN_SceneMaterial_OT_Add(bpy.types.Operator):
+    bl_idname = 'xfbin_scene_mat.add'
+    bl_label = 'Add Shader'
+
+    def execute(self, context):
+        xfbin_scene = bpy.context.scene.xfbin_scene
+        
+        new_mat = xfbin_scene.xfbin_materials.add()
+        
+        return {'FINISHED'}
+
+
+class XFBIN_SceneMaterial_OT_Remove(bpy.types.Operator):
+    bl_idname = 'xfbin_scene_mat.remove'
+    bl_label = 'Remove Shader'
+
+    def execute(self, context):
+        xfbin_scene = bpy.context.scene.xfbin_scene
+        xfbin_scene.xfbin_materials.remove(xfbin_scene.xfbin_material_index)
+        if xfbin_scene.xfbin_material_index > 0:
+            xfbin_scene.xfbin_material_index -= 1
+
+        return {'FINISHED'}
+    
+
+class XfbinSceneMaterialPropertyGroup(PropertyGroup):
+    def update_name(self, context):
+        if self.material:
+            self.name = self.material.name
+        else:
+            self.name = 'Material'
+    name: StringProperty(name='Name', default='Material')
+    
+    material: PointerProperty(
+        type= bpy.types.Material,
+        name='Material',
+        update= update_name
+    )
+    
+    alpha: FloatProperty(
+        name='Alpha',
+        default=1.0,
+        min=0.0,
+        max=1.0,
+        subtype='FACTOR'
+    )
+    
+    glare: FloatProperty(
+        name='Glare',
+        default=0.0,
+        min=0.0,
+        max=1.0,
+        subtype='FACTOR'
+    )
+    
+    uvOffset0: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
+    uvScale0: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
+    uvOffset1: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
+    uvScale1: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
+    uvOffset2: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
+    uvScale2: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
+    uvOffset3: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
+    uvScale3: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
+    
+    blendRate: FloatVectorProperty(name='Blend Rate', size=2, default=(0.0, 0.0))
+    falloff: FloatProperty(
+        name='Falloff',
+        default=0.0,
+        subtype='NONE',
+    )
+    outlineID: IntProperty(
+        name='Outline ID',
+        default=0,
+        subtype='NONE',
+    )
 
 class XfbinSceneManagerPropertyGroup(PropertyGroup):
     
@@ -267,14 +352,14 @@ class XfbinSceneManagerPropertyGroup(PropertyGroup):
         subtype='COLOR',
         size=3
     )
-    '''xfbin_materials : CollectionProperty(
+    xfbin_materials : CollectionProperty(
         type=XfbinSceneMaterialPropertyGroup,
         name='XFBIN Materials',
     )
     
     xfbin_material_index: IntProperty(
         name='XFBIN Material Index',
-    )'''
+    )
 
 
 class XfbinSceneManagerPanel(Panel):
@@ -296,30 +381,43 @@ class XfbinSceneManagerPanel(Panel):
 
         box = layout
         row = box.row()
-        '''row.label(text='Scene Materials:')
+        row.label(text='Scene Materials:')
         
         row = box.row()
         # list
         row.template_list("XFBIN_UL_SceneMaterials", "", xfbin_scene_manager, "xfbin_materials", xfbin_scene_manager, "xfbin_material_index")
         col = row.column(align=True)
-        col.operator("xfbin_mat.shader_add", icon='ADD', text="")
-        col.operator("xfbin_mat.shader_remove", icon='REMOVE', text="")
+        col.operator("xfbin_scene_mat.add", icon='ADD', text="")
+        col.operator("xfbin_scene_mat.remove", icon='REMOVE', text="")
         
         row = box.row()
-        row.separator()
+        row.operator('xfbin_scene.link_materials', text='Link Materials')
         row = box.row()
-        row.label(text='Material UV Offsets (selected material):')
+        row.label(text='Material Properties (selected material):')
         row = box.row()
+        properties_box = box.box()
+        row = properties_box.row()
         if xfbin_scene_manager.xfbin_materials and xfbin_scene_manager.xfbin_material_index >= 0:
             matprop: XfbinSceneMaterialPropertyGroup = xfbin_scene_manager.xfbin_materials[xfbin_scene_manager.xfbin_material_index]
+            row.prop(matprop, 'alpha', text='Alpha')
+            row.prop(matprop, 'glare', text='Glare')
+            row = properties_box.row()
+            row.prop(matprop, 'blendRate', text='Blend Rate')
+            row.label(text='Falloff/OutlineID:')
+            row.prop(matprop, 'falloff', text='Falloff')
+            row.prop(matprop, 'outlineID', text='Outline ID')
+            row = properties_box.row()
             row.prop(matprop, 'uvOffset0', text='UV0 Offset')
             row.prop(matprop, 'uvScale0', text='UV0 Scale')
-            row = box.row()
-            row.prop(matprop, 'uvOffset1', text='UV1 Offset/Scale')
-            row = box.row()
-            row.prop(matprop, 'uvOffset2', text='UV2 Offset/Scale')
-            row = box.row()
-            row.prop(matprop, 'uvOffset3', text='UV3 Offset/Scale')'''
+            row = properties_box.row()
+            row.prop(matprop, 'uvOffset1', text='UV1 Offset')
+            row.prop(matprop, 'uvScale1', text='UV1 Scale')
+            row = properties_box.row()
+            row.prop(matprop, 'uvOffset2', text='UV2 Offset')
+            row.prop(matprop, 'uvScale2', text='UV2 Scale')
+            row = properties_box.row()
+            row.prop(matprop, 'uvOffset3', text='UV3 Offset')
+            row.prop(matprop, 'uvScale3', text='UV3 Scale')
 
         lightdir_box = box.box()
         row = lightdir_box.row()
@@ -471,69 +569,72 @@ class XFBIN_Scene_OT_CreatePointLight(bpy.types.Operator):
         return {'FINISHED'}
 
 
-'''class XFBIN_UL_SceneMaterials(bpy.types.UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        row = layout.row(align=True)
-        if item.material:
-            row.label(text=item.material.name, icon='MATERIAL')
-        else:
-            row.label(text=item.name)
-        row.prop(item, 'material',emboss= True, text='', icon='MATERIAL')
-
-
-class XFBIN_SceneMaterial_OT_Add(bpy.types.Operator):
-    bl_idname = 'xfbin_mat.shader_add'
-    bl_label = 'Add Shader'
+class XFBIN_Scene_OT_LinkMaterials(bpy.types.Operator):
+    bl_idname = 'xfbin_scene.link_materials'
+    bl_label = 'Link Materials'
+    bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        xfbin_scene = bpy.context.scene.xfbin_scene
-        
-        new_mat = xfbin_scene.xfbin_materials.add()
-        
+        scene = context.scene
+        xfbin_scene_manager: XfbinSceneManagerPropertyGroup = scene.xfbin_scene
+
+        for xfbin_mat in xfbin_scene_manager.xfbin_materials:
+            if not xfbin_mat.material:
+                continue
+            
+            material_index = xfbin_scene_manager.xfbin_materials.find(xfbin_mat.name)
+            if material_index == -1:
+                continue
+
+            blender_mat = bpy.data.materials.get(xfbin_mat.name)
+            if blender_mat:
+                # look for specific nodes
+                # uv nodes
+                node_tree = blender_mat.node_tree
+                if not node_tree:
+                    continue
+                for i in range(4):
+                    uv_offset_name = f'SceneUVoffset{i}'
+                    uv_scale_name = f'SceneUVscale{i}'
+                    uv_offset_node = node_tree.nodes.get(uv_offset_name)
+                    uv_scale_node = node_tree.nodes.get(uv_scale_name)
+                    if uv_offset_node:
+                        uv_offset_node.attribute_name = f"xfbin_scene.xfbin_materials[{material_index}].uvOffset{i}"
+                    if uv_scale_node:
+                        uv_scale_node.attribute_name = f"xfbin_scene.xfbin_materials[{material_index}].uvScale{i}"
+                
+                # blend rate node
+                blend_rate_node = node_tree.nodes.get('SceneBlendRate')
+                if blend_rate_node:
+                    blend_rate_node.attribute_name = f"xfbin_scene.xfbin_materials[{material_index}].blendRate"
+                
+                # falloff node
+                falloff_node = node_tree.nodes.get('SceneFalloff')
+                if falloff_node:
+                    falloff_node.attribute_name = f"xfbin_scene.xfbin_materials[{material_index}].falloff"
+                
+                # useSceneNode
+                use_scene_node = node_tree.nodes.get('useSceneManager')
+                if use_scene_node:
+                    use_scene_node.outputs[0].default_value = 1.0
+                    
+
         return {'FINISHED'}
 
-class XFBIN_SceneMaterial_OT_Remove(bpy.types.Operator):
-    bl_idname = 'xfbin_mat.shader_remove'
-    bl_label = 'Remove Shader'
-
-    def execute(self, context):
-        xfbin_scene = bpy.context.scene.xfbin_scene
-        xfbin_scene.xfbin_materials.remove(xfbin_scene.xfbin_material_index)
-        if xfbin_scene.xfbin_material_index > 0:
-            xfbin_scene.xfbin_material_index -= 1
-
-        return {'FINISHED'}
-    
-
-class XfbinSceneMaterialPropertyGroup(PropertyGroup):
-    def update_name(self, context):
-        if self.material:
-            self.name = self.material.name
-        else:
-            self.name = 'Material'
-    name: StringProperty(name='Name', default='Material')
-    
-    material: PointerProperty(
-        type= bpy.types.Material,
-        name='Material',
-        update= update_name
-    )
-    
-    uvOffset0: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
-    uvScale0: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
-    uvOffset1: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
-    uvScale1: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
-    uvOffset2: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
-    uvScale2: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))
-    uvOffset3: FloatVectorProperty(name='UV Offset', size=2, default=(0.0, 0.0))
-    uvScale3: FloatVectorProperty(name='UV Scale', size=2, default=(1.0, 1.0))'''
 
 scene_property_groups = (
-    XfbinSceneManagerPropertyGroup,
+    XfbinSceneMaterialPropertyGroup,
+    XfbinSceneManagerPropertyGroup
 )
 
 scene_classes = (
     *scene_property_groups,
+    
+    XFBIN_UL_SceneMaterials,
+    XFBIN_SceneMaterial_OT_Add,
+    XFBIN_SceneMaterial_OT_Remove,
+    
+    XFBIN_Scene_OT_LinkMaterials,
     XFBIN_Scene_OT_CreateLight,
     XFBIN_Scene_OT_CreatePointLight,
     XfbinSceneManagerPanel,

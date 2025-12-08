@@ -111,13 +111,7 @@ class ImportXFBIN(Operator, ImportHelper):
 
     directory: StringProperty(subtype='DIR_PATH', options={'HIDDEN', 'SKIP_SAVE'})
 
-    use_full_material_names: BoolProperty(
-        name="Full material names",
-        description="Display full name of materials in NUD meshes, instead of a shortened form")
-
     filter_glob: StringProperty(default="*.xfbin", options={"HIDDEN"})
-
-    import_all_textures: BoolProperty(name='Import All Textures', default=True)
     
     import_animations: BoolProperty(name='Import Animations', default=True)
 
@@ -125,11 +119,8 @@ class ImportXFBIN(Operator, ImportHelper):
                                  description='Clear the textures list before importing\n'
                                               "WARNING: Only enable this option if you're sure of what you're doing")
 
-    skip_lod_tex: BoolProperty(name='Skip LOD Textures', default=False)
-
     import_modelhit: BoolProperty(name='Import Stage Collision', default=True)
 
-    index: IntProperty(name="Index")
 
     def draw(self, context):
         layout = self.layout
@@ -137,18 +128,17 @@ class ImportXFBIN(Operator, ImportHelper):
         layout.use_property_split = True
         layout.use_property_decorate = True
 
-        layout.prop(self, 'import_all_textures')
         layout.prop(self, "clear_textures")
-        layout.prop(self, 'skip_lod_tex')
-        layout.prop(self, 'use_full_material_names')
         layout.prop(self, 'import_modelhit')
+        layout.prop(self, 'import_animations')
+        #layout.
 
         #add a list of files to import
-        layout.label(text="Files:")
-        layout.template_list("XFBIN_UL_IMPORT_LIST", "", self, "files_list", self, "fl_index", rows=5)
+        #layout.label(text="Files:")
+        #layout.template_list("XFBIN_UL_IMPORT_LIST", "", self, "files_list", self, "fl_index", rows=5)
 
-        row = layout.row(align=True)
-        row.operator("xfbin.import_add_file", icon='ADD', text="")
+        #row = layout.row(align=True)
+        #row.operator("xfbin.import_add_file", icon='ADD', text="")
         '''row.operator("xfbin.import_remove_file", icon='REMOVE', text="").index = self.index
         row.operator("xfbin.import_clear_files", icon='X', text="")
         row = layout.row(align=True)
@@ -207,8 +197,6 @@ class DropXFBIN(Operator):
     skip_lod_tex: BoolProperty(name='Skip LOD Textures', default=False)
 
     import_modelhit: BoolProperty(name='Import Stage Collision', default=True)
-
-    index: IntProperty(name="Index")
     
 
     def execute(self, context):
@@ -997,7 +985,7 @@ class XfbinImporter:
                 if entry.entry_format == AnmEntryFormat.CAMERA:
                     #for cameras we're gonna need to make a separate action for each camera
                     camera_action = action
-                    #group_name = action.groups.new("camera").name
+                    group_name = entry.name
                     #get or create the camera object
                     camera_obj = bpy.data.objects.get(entry.name)
                     if not camera_obj:
@@ -1030,7 +1018,8 @@ class XfbinImporter:
                         insert_keyframes_fc(fcurves, curve.data_path, group_name, frames, values)
 
                 elif entry.entry_format == AnmEntryFormat.LIGHTDIRC:
-                    rotation180 = Euler((np.radians(180), 0, 0), 'XYZ').to_quaternion()
+                    #create a 180 rotation on the Z axis to account for the arrow empty pointing up
+                    quat180 = Euler((0, 0, np.radians(180)), 'XYZ').to_quaternion()
                     
                     light_obj = bpy.data.objects.get(entry.name)
                     if not light_obj:
@@ -1048,9 +1037,9 @@ class XfbinImporter:
                     
                     channelbag = action.layers[0].strips[0].channelbag(slot)
                     if channelbag:
-                        fcurves = channelbag.fcurves
+                        light_fcurves = channelbag.fcurves
                     else:
-                        fcurves = action.layers[0].strips[0].channelbags.new(slot).fcurves
+                        light_fcurves = action.layers[0].strips[0].channelbags.new(slot).fcurves
                     
                     for curve in entry.curves:
                         if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
@@ -1065,10 +1054,11 @@ class XfbinImporter:
                             new_rotations = []
                             for v in values:
                                 q = Quaternion((v[3], v[0], v[1], v[2])).inverted()
-                                q = rotation180 @ q
+                                q = quat180 @ q
                                 new_rotations.append(q.to_euler('XYZ'))
                             values = np.array(new_rotations)
                             curve.data_path = "rotation_euler"
+                            fcurves = light_fcurves
                         elif curve.data_path == "color":
                             fcurves = scene_fcurves
                             curve.data_path = 'xfbin_scene.lightdir_color'
@@ -1232,7 +1222,31 @@ class XfbinImporter:
                         insert_keyframes_fc(clump_fcurves, data_path, group_name, frames, values)
 
                 #materials
-                '''for material in clump.materials:
+                xfbin_scene = context.scene.xfbin_scene
+                scene_material_inputs = {"U0_LocX": ("uvOffset0", 0),
+                                        "V0_LocY": ("uvOffset0", 1),
+                                        "U1_LocX": ("uvOffset1", 0),
+                                        "V1_LocY": ("uvOffset1", 1),
+                                        "U2_LocX": ("uvOffset2", 0),
+                                        "V2_LocY": ("uvOffset2", 1),
+                                        "U3_LocX": ("uvOffset3", 0),
+                                        "V3_LocY": ("uvOffset3", 1),
+                                        "U0_ScaleX": ("uvScale0", 0),
+                                        "V0_ScaleY": ("uvScale0", 1),
+                                        "U1_ScaleX": ("uvScale1", 0),
+                                        "V1_ScaleY": ("uvScale1", 1),
+                                        "U2_ScaleX": ("uvScale2", 0),
+                                        "V2_ScaleY": ("uvScale2", 1),
+                                        "U3_ScaleX": ("uvScale3", 0),
+                                        "V3_ScaleY": ("uvScale3", 1),
+                                        "Falloff": ("falloff", 0),
+                                        "BlendRate1": ("blendRate", 0),
+                                        "BlendRate2": ("blendRate", 1),
+                                        "Glare": ("glare", 0),
+                                        "Alpha": ("alpha", 0),
+                                        "OutlineID": ("outlineID", 0),}
+                
+                for material in clump.materials:
                     
                     blender_mat = bpy.data.materials.get(material.name)
                     if not blender_mat:
@@ -1240,45 +1254,57 @@ class XfbinImporter:
                     
                     group_name = action.groups.new(material.name).name
                     
-                    blender_mat.animation_data_create()
-                    blender_mat.node_tree.animation_data_create()
-                    
-                    
-                    
-                    
-                    blender_mat.animation_data.action = action
-                    
-                    mat_action = blender_mat.animation_data.action
-                    
-                    #find the output node
-                    nodetree = blender_mat.node_tree                    
-                    output_node = nodetree.get_output_node('EEVEE')
-                    
-                    #get the node linked to the output node
-                    if output_node:
-                        shader_node = output_node.inputs['Surface'].links[0].from_node
-                    else:
-                        continue
-                    
-                    
-                    for curve in material.anm_entry.curves:
+                    # get or add the material
+                    scene_mat = xfbin_scene.xfbin_materials.get(material.name)
+                    if not scene_mat:
+                        scene_mat = xfbin_scene.xfbin_materials.add()
+                        scene_mat.material = blender_mat
+                        scene_mat.name = material.name
                         
-                        #UVs
-                        input_string = material_inputs.get(curve.data_path)
-                        if input_string:
-                            node_input = shader_node.inputs.get(input_string)
-                            if node_input:
-                                for keyframe in curve.keyframes:
-                                    node_input.default_value = keyframe.value[0]
-                                    node_input.keyframe_insert(data_path="default_value", frame=keyframe.frame * 0.01
-                                
-                                for keyframe in curve.keyframes:
-                                    # Insert keyframe into the action
-                                    fcurve = mat_action.fcurves.find(f'node_tree.nodes["{shader_node.name}"].inputs["{input_string}"].default_value', index=0)
-                                    if not fcurve:
-                                        fcurve = mat_action.fcurves.new(data_path=f'node_tree.nodes["{shader_node.name}"].inputs["{input_string}"].default_value', index=0, action_group=group_name)
-                                    fcurve.keyframe_points.insert(frame=keyframe.frame * 0.01, value=keyframe.value[0])'''
-        
+                    scene_mat_index = xfbin_scene.xfbin_materials.find(material.name)
+                    
+                    #link the material to the scene manager
+                    node_tree = blender_mat.node_tree
+                    if not node_tree:
+                        continue
+                    for i in range(4):
+                        uv_offset_name = f'SceneUVoffset{i}'
+                        uv_scale_name = f'SceneUVscale{i}'
+                        uv_offset_node = node_tree.nodes.get(uv_offset_name)
+                        uv_scale_node = node_tree.nodes.get(uv_scale_name)
+                        if uv_offset_node:
+                            uv_offset_node.attribute_name = f"xfbin_scene.xfbin_materials[{scene_mat_index}].uvOffset{i}"
+                        if uv_scale_node:
+                            uv_scale_node.attribute_name = f"xfbin_scene.xfbin_materials[{scene_mat_index}].uvScale{i}"
+                    
+                    # blend rate node
+                    blend_rate_node = node_tree.nodes.get('SceneBlendRate')
+                    if blend_rate_node:
+                        blend_rate_node.attribute_name = f"xfbin_scene.xfbin_materials[{scene_mat_index}].blendRate"
+                    
+                    # falloff node
+                    falloff_node = node_tree.nodes.get('SceneFalloff')
+                    if falloff_node:
+                        falloff_node.attribute_name = f"xfbin_scene.xfbin_materials[{scene_mat_index}].falloff"
+                    
+                    # useSceneNode
+                    use_scene_node = node_tree.nodes.get('useSceneManager')
+                    if use_scene_node:
+                        use_scene_node.outputs[0].default_value = 1.0
+                
+                    for curve in material.curves:
+                        if curve is None or (not len(curve.keyframes)) or curve.data_path == AnmDataPath.UNKNOWN:
+                            continue
+
+                        frames = list(map(lambda x: frame_to_blender(x.frame), curve.keyframes))
+                        values = convert_anm_values(curve.data_path, list(map(lambda x: x.value, curve.keyframes)))
+                        
+                        material_info = scene_material_inputs.get(curve.data_path)
+                        if not material_info:
+                            continue
+                        data_path = f'xfbin_scene.xfbin_materials[{scene_mat_index}].{material_info[0]}'
+                        
+                        insert_material_keyframes(scene_fcurves, data_path, group_name, frames, values, material_info[1])
 
             actions.append(action)
     
@@ -1336,6 +1362,16 @@ class XfbinImporter:
         
         return armature_obj
 
+
+def insert_material_keyframes(fcurves, data_path, group_name, frames, values, index):
+    if values:
+        try:
+            fc = fcurves.new(data_path=data_path, index=index)
+        except:
+            return
+        fc.keyframe_points.add(len(frames))
+        fc.keyframe_points.foreach_set('co', [x for co in list(map(lambda f, v: (f, v[0]), frames, values)) for x in co])
+        fc.update()
 
 def insert_keyframes(action, data_path, group_name, frames, values):
     if values:

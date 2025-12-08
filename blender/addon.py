@@ -147,6 +147,7 @@ def unregister():
     bpy.utils.unregister_class(XfbinPointersGroup)
 
     for c in reversed(classes):
+        #print(f"Unregistering class: {c.__name__}")
         bpy.utils.unregister_class(c)
 
     # remove from the export / import menu
