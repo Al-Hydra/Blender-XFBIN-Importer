@@ -125,9 +125,6 @@ class ImportXFBIN(Operator, ImportHelper):
     def draw(self, context):
         layout = self.layout
 
-        layout.use_property_split = True
-        layout.use_property_decorate = True
-
         layout.prop(self, "clear_textures")
         layout.prop(self, 'import_modelhit')
         layout.prop(self, 'import_animations')
@@ -233,12 +230,9 @@ class XfbinImporter:
     def __init__(self, operator: Operator, filepath: str, import_settings: dict):
         self.operator = operator
         self.filepath = filepath
-        self.use_full_material_names = import_settings.get(
-            "use_full_material_names")
-        self.import_all_textures = import_settings.get('import_all_textures')
         self.clear_textures = import_settings.get('clear_textures')
-        self.skip_lod_tex = import_settings.get('skip_lod_tex')
         self.import_modelhit = import_settings.get('import_modelhit')
+        self.import_animations = import_settings.get('import_animations')
         
         # get the file name without extension
         xfbin_file = os.path.basename(self.filepath).split('.')[0]
@@ -344,15 +338,16 @@ class XfbinImporter:
         #animations
         
         # Create an empty object to store the anm chunks list
-        empty_anm = bpy.data.objects.new(
-            f'{XFBIN_ANMS_OBJ} [{self.collection.name}]', None)
-        empty_anm.empty_display_size = 0
+        if self.import_animations:
+            actions = self.make_actions(anm_chunks, cam_chunks, context)
+            if actions:
+                empty_anm = bpy.data.objects.new(
+                    f'{XFBIN_ANMS_OBJ} [{self.collection.name}]', None)
+                empty_anm.empty_display_size = 0
 
-        self.collection.objects.link(empty_anm)
-        
-        actions = self.make_actions(anm_chunks, cam_chunks, context)
+                self.collection.objects.link(empty_anm)
 
-        empty_anm.xfbin_anm_chunks_data.init_data(anm_chunks, cam_chunks, lightdirc_chunks, lightpoint_chunks, ambient_chunks, context)
+                empty_anm.xfbin_anm_chunks_data.init_data(anm_chunks, cam_chunks, lightdirc_chunks, lightpoint_chunks, ambient_chunks, context)
 
         
 
@@ -400,20 +395,20 @@ class XfbinImporter:
                 continue
 
             #create Arrow Empty
-            light_object = bpy.data.objects.new(name=f'{light.name}', object_data=None)
-            light_object.empty_display_type = 'SINGLE_ARROW'
-            light_object.empty_display_size = 2
+            #light_object = bpy.data.objects.new(name=f'{light.name}', object_data=None)
+            light_data = bpy.data.lights.new(name=f"{light.name}", type='SUN')
+            light_object = bpy.data.objects.new(name=f'{light.name}', object_data=light_data)
             #light_object.rotation_mode = 'QUATERNION'
 
             scene.collection.objects.link(light_object)
             
             # the 180 rotation is done because the arrow empty points up so we have to account of that
-            light_rotation = rotation180 @ Quaternion((light.rotation[3], light.rotation[0], light.rotation[1], light.rotation[2])).inverted()
+            light_rotation = Quaternion((light.rotation[3], light.rotation[0], light.rotation[1], light.rotation[2])).inverted()
             light_rotation = light_rotation.to_euler()
             
             light_object.rotation_euler = light_rotation
-            xfbin_scene_manager.lightdir_object = light_object
-            xfbin_scene_manager.lightdir_color = (light.color[0], light.color[1], light.color[2])
+            #xfbin_scene_manager.lightdir_object = light_object
+            #xfbin_scene_manager.lightdir_color = (light.color[0], light.color[1], light.color[2])
     
     
     def make_lightpoints(self, lightpoint_chunks: List[NuccChunkLightPoint], context):
@@ -983,7 +978,6 @@ class XfbinImporter:
                 entry: AnmEntry
 
                 if entry.entry_format == AnmEntryFormat.CAMERA:
-                    #for cameras we're gonna need to make a separate action for each camera
                     camera_action = action
                     group_name = entry.name
                     #get or create the camera object
@@ -1018,14 +1012,15 @@ class XfbinImporter:
                         insert_keyframes_fc(fcurves, curve.data_path, group_name, frames, values)
 
                 elif entry.entry_format == AnmEntryFormat.LIGHTDIRC:
-                    #create a 180 rotation on the Z axis to account for the arrow empty pointing up
-                    quat180 = Euler((0, 0, np.radians(180)), 'XYZ').to_quaternion()
+                    invert_xyz
                     
                     light_obj = bpy.data.objects.get(entry.name)
                     if not light_obj:
-                        light_obj = bpy.data.objects.new(entry.name, None)
-                        light_obj.empty_display_type = 'SINGLE_ARROW'
-                        light_obj.empty_display_size = 2
+                        light_data = bpy.data.lights.new(name=f"{entry.name}", type='SUN')
+                        light_obj = bpy.data.objects.new(name=f'{entry.name}', object_data=light_data)
+                        self.collection.objects.link(light_obj)
+                    
+                    xfbin_scene.lightdirc_object = light_obj
                     
                     light_obj.animation_data_create()
                     light_obj.animation_data.action = action
@@ -1053,15 +1048,18 @@ class XfbinImporter:
                         if curve.data_path == "rotation":
                             new_rotations = []
                             for v in values:
-                                q = Quaternion((v[3], v[0], v[1], v[2])).inverted()
-                                q = quat180 @ q
-                                new_rotations.append(q.to_euler('XYZ'))
+                                q = Quaternion((v[3], v[0], v[1], -v[2]))#.inverted()
+                                #q = quat180 @ q
+                                new_rotations.append(q.to_euler('ZYX'))
                             values = np.array(new_rotations)
                             curve.data_path = "rotation_euler"
                             fcurves = light_fcurves
-                        elif curve.data_path == "color":
+                        """elif curve.data_path == "color":
                             fcurves = scene_fcurves
                             curve.data_path = 'xfbin_scene.lightdir_color'
+                        elif curve.data_path == "energy":
+                            fcurves = scene_fcurves
+                            curve.data_path = 'xfbin_scene.lightdir_intensity'"""
                         
                         insert_keyframes_fc(fcurves, curve.data_path, group_name, frames, values.tolist())
                     
