@@ -1011,9 +1011,7 @@ class XfbinImporter:
                         
                         insert_keyframes_fc(fcurves, curve.data_path, group_name, frames, values)
 
-                elif entry.entry_format == AnmEntryFormat.LIGHTDIRC:
-                    invert_xyz
-                    
+                elif entry.entry_format == AnmEntryFormat.LIGHTDIRC:                    
                     light_obj = bpy.data.objects.get(entry.name)
                     if not light_obj:
                         light_data = bpy.data.lights.new(name=f"{entry.name}", type='SUN')
@@ -1048,7 +1046,7 @@ class XfbinImporter:
                         if curve.data_path == "rotation":
                             new_rotations = []
                             for v in values:
-                                q = Quaternion((v[3], v[0], v[1], -v[2]))#.inverted()
+                                q = Quaternion((v[3], v[0], v[1], v[2])).inverted()
                                 #q = quat180 @ q
                                 new_rotations.append(q.to_euler('ZYX'))
                             values = np.array(new_rotations)
