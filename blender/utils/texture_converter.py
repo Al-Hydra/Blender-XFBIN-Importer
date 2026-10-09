@@ -2,7 +2,10 @@ from ...xfbin_lib.xfbin.structure.nut import *
 from .tga import *
 from ...xfbin_lib.xfbin.structure.dds import *
 from .png.png import *
-from .blockCompressor import blockCompressor
+try:
+    from .blockCompressor import blockCompressor
+except ImportError:  # the compiled module is Windows-only (.pyd)
+    from .blockCompressor import blockCompressor_py as blockCompressor
 import numpy as np
 from cProfile import Profile
 import io

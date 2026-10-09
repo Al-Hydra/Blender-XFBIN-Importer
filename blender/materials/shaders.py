@@ -5,6 +5,42 @@ path = os.path.dirname(os.path.realpath(__file__))
 
 from ..panels.materials_panel import XfbinMaterialPropertyGroup, XfbinMaterialTexturesPropertyGroup, XfbinTextureChunkPropertyGroup
 
+
+def setup_post_outlines():
+	"""Add the PostOutlines group to the scene compositor and enable it in the viewport."""
+	scene = bpy.context.scene
+	scene.use_nodes = True
+	# Blender 5.0 replaced scene.node_tree with scene.compositing_node_group; skip the
+	# outline post-process there rather than failing the whole import
+	tree = getattr(scene, "node_tree", None)
+	if tree is None:
+		return
+
+	postOutline_node = tree.nodes.get("PostOutlines")
+	if not postOutline_node:
+		# add the node, then link it
+		composite_node = tree.nodes.get("Composite")
+		render_layers_node = tree.nodes.get("Render Layers")
+		postOutline_node = tree.nodes.new("CompositorNodeGroup")
+		postOutline_node.node_tree = bpy.data.node_groups.get("PostOutlines")
+		postOutline_node.name = "PostOutlines"
+
+		tree.links.new(render_layers_node.outputs["Image"], postOutline_node.inputs["Image"])
+		tree.links.new(render_layers_node.outputs["outlineID"], postOutline_node.inputs["Outline ID"])
+		tree.links.new(render_layers_node.outputs["outlineHash"], postOutline_node.inputs["Outline Hash"])
+		tree.links.new(postOutline_node.outputs[0], composite_node.inputs[0])
+		#check if the viewer node exists
+		viewer_node = tree.nodes.get("Viewer")
+		if viewer_node:
+			#make links only if the view node exists
+			tree.links.new(postOutline_node.outputs[0], viewer_node.inputs[0])
+
+	# ensure post processing is set to always (no 3D view when running headless)
+	space = bpy.context.space_data
+	if space and space.type == 'VIEW_3D':
+		space.shading.use_compositor = 'ALWAYS'
+
+
 #Materials
 def F00A(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 	
@@ -36,33 +72,7 @@ def F00A(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.node_groups = ['PostOutlines']
 	
-	#check if PostOutlines node exists in compositor
-	bpy.context.scene.use_nodes = True
-	tree = bpy.context.scene.node_tree
-		
-	postOutline_node = tree.nodes.get("PostOutlines")
-	if not postOutline_node:
-		# add the node, then link it
-		composite_node = tree.nodes.get("Composite")
-		render_layers_node = tree.nodes.get("Render Layers")
-		postOutline_node = tree.nodes.new("CompositorNodeGroup")
-		postOutline_node.node_tree = bpy.data.node_groups.get("PostOutlines")
-		postOutline_node.name = "PostOutlines"
-
-		tree = bpy.context.scene.node_tree
-		tree.links.new(render_layers_node.outputs["Image"], postOutline_node.inputs["Image"])
-		tree.links.new(render_layers_node.outputs["outlineID"], postOutline_node.inputs["Outline ID"])
-		tree.links.new(render_layers_node.outputs["outlineHash"], postOutline_node.inputs["Outline Hash"])
-		tree.links.new(postOutline_node.outputs[0], composite_node.inputs[0])
-  		#check if the viewer node exists
-		viewer_node = tree.nodes.get("Viewer")
-		if viewer_node:
-			#make links only if the view node exists
-			tree.links.new(postOutline_node.outputs[0], viewer_node.inputs[0])
-
-	# ensure post processing is set to always
-	if bpy.context.space_data.type == 'VIEW_3D':
-		bpy.context.space_data.shading.use_compositor = 'ALWAYS'
+	setup_post_outlines()
 
 
 	material = material.copy()
@@ -150,33 +160,7 @@ def _02_F00A(self, mesh, xfbin_mat, mesh_flags, outline_hash):
 		with bpy.data.libraries.load(material_path, link = False) as (data_from, data_to):
 			data_to.node_groups = ['PostOutlines']
 	
-	#check if PostOutlines node exists in compositor
-	bpy.context.scene.use_nodes = True
-	tree = bpy.context.scene.node_tree
-		
-	postOutline_node = tree.nodes.get("PostOutlines")
-	if not postOutline_node:
-		# add the node, then link it
-		composite_node = tree.nodes.get("Composite")
-		render_layers_node = tree.nodes.get("Render Layers")
-		postOutline_node = tree.nodes.new("CompositorNodeGroup")
-		postOutline_node.node_tree = bpy.data.node_groups.get("PostOutlines")
-		postOutline_node.name = "PostOutlines"
-
-		tree = bpy.context.scene.node_tree
-		tree.links.new(render_layers_node.outputs["Image"], postOutline_node.inputs["Image"])
-		tree.links.new(render_layers_node.outputs["outlineID"], postOutline_node.inputs["Outline ID"])
-		tree.links.new(render_layers_node.outputs["outlineHash"], postOutline_node.inputs["Outline Hash"])
-		tree.links.new(postOutline_node.outputs[0], composite_node.inputs[0])
-  		#check if the viewer node exists
-		viewer_node = tree.nodes.get("Viewer")
-		if viewer_node:
-			#make links only if the view node exists
-			tree.links.new(postOutline_node.outputs[0], viewer_node.inputs[0])
-
-	# ensure post processing is set to always
-	if bpy.context.space_data.type == 'VIEW_3D':
-		bpy.context.space_data.shading.use_compositor = 'ALWAYS'
+	setup_post_outlines()
  
 	material = material.copy()
 	material.name = xfbin_mat.name

@@ -4,7 +4,10 @@ import zlib
 import numpy as np
 from zlib import crc32
 from io import BytesIO
-from . import pngdefilter
+try:
+    from . import pngdefilter
+except ImportError:  # the compiled module is Windows-only (.pyd)
+    from . import pngdefilter_py as pngdefilter
 
 # ─────────────────────────────
 # PNG Color Type Constants
